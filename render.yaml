@@ -8,7 +8,9 @@ services:
     healthCheckPath: /healthz
     envVars:
       - key: ADMIN_KEY
-        sync: false # set in the Render dashboard
+        sync: false # the admin login password — set in the Render dashboard
+      - key: GITHUB_TOKEN
+        sync: false # optional: raises GitHub rate limit, enables 60s commit polling
       - key: DATABASE_URL
         fromDatabase:
           name: runhack-db

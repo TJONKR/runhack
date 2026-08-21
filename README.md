@@ -9,15 +9,31 @@ Store + Play). The join page mints an unguessable `userId` per stint and hands
 Traccar a config deep link pointing at `/ingest/:userId`. All lap logic runs
 server-side: geofence sequence, dwell, pace window, leaderboard.
 
+Every event has its own leaderboard at `/:slug/board`. Rank = score, where the
+formula lives in event config (default `km x commits`, matching the event's
+"what you built × how far you ran"; `km_plus_commits` with a weight is also
+supported — change it without code). Commits come from each team's public
+GitHub repo (set at first join or by an admin), counted on the default branch
+within the event window, polled every 60s with `GITHUB_TOKEN` set (5 min
+without). Laps are recorded valid or invalid — invalid when too fast (GPS
+bounce), too slow (the 7:00/km walk rule), or outside the event window — and
+the board shows the last lap's verdict with its reason.
+
 ## Layout
 
 - `src/lapEngine.js` — pure lap state machine (zones in order, dwell, min/max lap window). Tested.
-- `src/ingest.js` — OsmAnd-protocol ingest (query, form, or JSON), activation/freeze of runners, rate limit.
+- `src/ingest.js` — OsmAnd-protocol ingest (query, form, or JSON), activation/freeze of runners,
+  event-window enforcement, rate limit.
+- `src/github.js` — public-repo commit poller (one request per team per poll).
 - `src/api.js` — public: event info, member registration, join-page status poll, board.
 - `src/admin.js` — admin API, `Authorization: Bearer $ADMIN_KEY`.
-- `public/admin.html` — event setup: Leaflet map, draw geofence zones in lap order, teams, links.
-- `public/join.html` — runner flow: pick team → name → Traccar deep link → "waiting for GPS" → live.
-- `public/board.html` — big-screen leaderboard, polls every 3s.
+- `public/admin.html` — race control: login (password = `ADMIN_KEY` env var), event setup with
+  start/end times, Leaflet zone editor, teams + repos, and a simulator that loops a fake runner
+  through the drawn zones via the real /ingest pipeline.
+- `public/join.html` — runner flow: pick team → name (+ team repo if unset) → Traccar deep link →
+  "waiting for GPS" → live.
+- `public/board.html` — big-screen leaderboard in the RUN/HACK look: countdown/starting gun,
+  laps/km/commits/score, last-lap validity, sponsor logo marquee from `public/brands/`.
 
 ## URLs
 

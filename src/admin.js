@@ -17,14 +17,14 @@ router.get('/events', async (req, res) => {
 });
 
 router.post('/events', async (req, res) => {
-  const { slug, name, zones = [], config = {} } = req.body;
+  const { slug, name, zones = [], config = {}, startAt = null, endAt = null } = req.body;
   if (!slug || !name) return res.status(400).json({ error: 'slug and name required' });
   if (!/^[a-z0-9-]+$/.test(slug)) return res.status(400).json({ error: 'slug: lowercase, digits, dashes' });
   const { rows } = await pool.query(
-    `INSERT INTO events (slug, name, zones, config) VALUES ($1, $2, $3, $4)
-     ON CONFLICT (slug) DO UPDATE SET name = $2, zones = $3, config = $4
+    `INSERT INTO events (slug, name, zones, config, start_at, end_at) VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (slug) DO UPDATE SET name = $2, zones = $3, config = $4, start_at = $5, end_at = $6
      RETURNING *`,
-    [slug, name, JSON.stringify(zones), JSON.stringify(config)]
+    [slug, name, JSON.stringify(zones), JSON.stringify(config), startAt, endAt]
   );
   res.json(rows[0]);
 });
@@ -52,6 +52,16 @@ router.post('/events/:slug/teams', async (req, res) => {
     [rows[0].id, name]
   );
   res.json(team.rows[0]);
+});
+
+router.patch('/events/:slug/teams/:teamId', async (req, res) => {
+  const { repoUrl } = req.body;
+  await pool.query(
+    `UPDATE teams SET repo_url = $1, commit_count = CASE WHEN $1 IS NULL OR $1 = '' THEN 0 ELSE commit_count END
+      WHERE id = $2 AND event_id = (SELECT id FROM events WHERE slug = $3)`,
+    [repoUrl ?? null, req.params.teamId, req.params.slug]
+  );
+  res.json({ ok: true });
 });
 
 router.delete('/events/:slug/teams/:teamId', async (req, res) => {

@@ -4,58 +4,165 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RUN/HACK board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
-  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; background: #0f1115; color: #eee; }
-  header { padding: 20px 32px; display: flex; justify-content: space-between; align-items: baseline; }
-  h1 { font-size: 28px; margin: 0; }
-  .clock { color: #888; font-variant-numeric: tabular-nums; }
-  table { width: 100%; border-collapse: collapse; font-size: 22px; }
-  th { text-align: left; color: #777; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
-       padding: 8px 16px; }
-  td { padding: 14px 16px; border-top: 1px solid #1e2229; font-variant-numeric: tabular-nums; }
-  td.rank { color: #666; width: 40px; }
+  :root {
+    --paper: #F4F3EF; --navy: #08182F; --blue: #1311D1;
+    --orange: #DD6A24; --gold: #F0BE2A; --sky: #3A90E6;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy); color: var(--paper); }
+  .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+
+  header { background: var(--blue); padding: 18px 32px; display: flex; align-items: center; gap: 24px;
+           border-bottom: 4px solid var(--gold); flex-wrap: wrap; }
+  .wordmark { font-weight: 900; font-size: 34px; letter-spacing: -1.5px; white-space: nowrap; }
+  .wordmark .slash { color: var(--orange); }
+  .wordmark .x { color: var(--gold); font-size: 22px; margin: 0 6px; }
+  .eventname { font-family: 'Geist Mono', monospace; text-transform: uppercase; letter-spacing: 0.15em;
+               font-size: 13px; color: rgba(244,243,239,0.7); }
+  .spacer { flex: 1; }
+
+  /* countdown — "starting gun" style */
+  #gun { display: flex; gap: 2px; align-items: stretch; }
+  .gun-cell { background: rgba(8,24,47,0.55); padding: 6px 14px; text-align: center; min-width: 72px; }
+  .gun-cell b { display: block; font-family: 'Geist Mono', monospace; font-size: 30px; font-weight: 600; }
+  .gun-cell span { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.2em;
+                   color: rgba(244,243,239,0.55); text-transform: uppercase; }
+  .gun-label { font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.2em;
+               text-transform: uppercase; align-self: center; margin-right: 10px; color: var(--gold); }
+  .gun-final b { color: var(--orange); }
+
+  .rulebar { font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase;
+             padding: 8px 32px; color: rgba(244,243,239,0.5); border-bottom: 1px solid rgba(244,243,239,0.1);
+             display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 21px; }
+  th { text-align: left; color: rgba(244,243,239,0.45); font-family: 'Geist Mono', monospace; font-size: 11px;
+       text-transform: uppercase; letter-spacing: 0.15em; padding: 14px 16px 6px; font-weight: 400; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td { padding: 13px 16px; border-top: 1px solid rgba(244,243,239,0.08); }
+  td.rank { color: rgba(244,243,239,0.35); width: 44px; font-family: 'Geist Mono', monospace; }
+  tr.first td.rank, tr.first td.score { color: var(--gold); }
   td.team { font-weight: 700; }
-  td.km { font-weight: 700; color: #e63946; }
-  .runner { color: #aaa; font-size: 16px; }
-  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
-  .running { background: #4ade80; } .stopped { background: #f59e0b; } .idle { background: #444; }
+  td.score { font-weight: 900; color: var(--sky); font-size: 24px; }
+  td.km { color: var(--orange); font-weight: 700; }
+  .runner { color: rgba(244,243,239,0.65); font-size: 15px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }
+  .running { background: #4ade80; box-shadow: 0 0 8px #4ade80; } .stopped { background: var(--gold); } .idle { background: #333f52; }
+  .lap-valid { color: #4ade80; } .lap-invalid { color: var(--orange); }
+  .lap-reason { font-family: 'Geist Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+                color: rgba(244,243,239,0.4); display: block; }
+
+  footer { margin-top: 40px; padding: 20px 0 28px; border-top: 1px solid rgba(244,243,239,0.1); overflow: hidden; }
+  .brands { display: flex; gap: 64px; align-items: center; width: max-content; animation: marquee 25s linear infinite; }
+  .brands img { height: 34px; opacity: 0.85; }
+  @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 </style>
 </head>
 <body>
-<header><h1 id="title">RUN/HACK</h1><div class="clock" id="clock"></div></header>
+<header>
+  <div class="wordmark">RUN<span class="slash">/</span>HACK<span class="x">×</span>ROX<span style="color:var(--gold)">FIT</span></div>
+  <div class="eventname" id="eventname"></div>
+  <div class="spacer"></div>
+  <div class="gun-label" id="gunlabel"></div>
+  <div id="gun"></div>
+</header>
+<div class="rulebar">
+  <span id="scoreRule">You run. You build.</span>
+  <span>Pace rule: slower than 7'00"/km isn't running.</span>
+</div>
 <table>
-  <thead><tr><th></th><th>Team</th><th>Runner</th><th>Laps</th><th>KM</th><th>Last lap</th><th>Pace</th></tr></thead>
+  <thead><tr>
+    <th></th><th>Team</th><th>Runner</th>
+    <th class="num">Laps</th><th class="num">KM</th><th class="num">Commits</th>
+    <th class="num">Score</th><th class="num">Last lap</th><th class="num">Pace</th>
+  </tr></thead>
   <tbody id="rows"></tbody>
 </table>
+<footer><div class="brands" id="brands"></div></footer>
+
 <script>
 const slug = location.pathname.split('/')[1];
+let board = null;
+let clockSkewMs = 0;
+
 function fmtPace(s) {
   if (s == null) return '—';
-  return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}/km`;
+  return `${Math.floor(s / 60)}'${String(Math.round(s % 60)).padStart(2, '0')}"/km`;
 }
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+const REASONS = { too_fast: 'GPS bounce', too_slow: 'too slow', outside_window: 'outside race' };
+
 async function tick() {
   try {
     const r = await fetch(`/api/${slug}/board`);
     if (!r.ok) return;
-    const b = await r.json();
-    document.getElementById('title').textContent = b.event;
-    document.getElementById('rows').innerHTML = b.teams.map((t, i) => `
-      <tr>
-        <td class="rank">${i + 1}</td>
-        <td class="team">${t.team}</td>
-        <td><span class="dot ${t.status}"></span><span class="runner">${t.runner ?? '—'}</span></td>
-        <td>${t.laps}</td>
-        <td class="km">${t.km.toFixed(1)}</td>
-        <td>${t.lastLapS != null ? t.lastLapS + 's' : '—'}</td>
-        <td>${fmtPace(t.paceSPerKm)}</td>
-      </tr>`).join('');
+    board = await r.json();
+    clockSkewMs = new Date(board.serverNow).getTime() - Date.now();
+    document.getElementById('eventname').textContent = board.event;
+    document.getElementById('scoreRule').textContent =
+      'You run. You build. Score = ' +
+      (board.scoreFormula === 'km_plus_commits' ? 'km + weighted commits.' : 'km x commits.');
+    document.getElementById('rows').innerHTML = board.teams.map((t, i) => {
+      const lap = t.lastLap;
+      const lapCell = lap
+        ? `<span class="${lap.valid ? 'lap-valid' : 'lap-invalid'}">${lap.seconds}s ${lap.valid ? '✓' : '✕'}</span>` +
+          (lap.valid ? '' : `<span class="lap-reason">${REASONS[lap.reason] || lap.reason || 'invalid'}</span>`)
+        : '—';
+      return `<tr class="${i === 0 ? 'first' : ''}">
+        <td class="rank">${String(i + 1).padStart(2, '0')}</td>
+        <td class="team">${esc(t.team)}</td>
+        <td><span class="dot ${t.status}"></span><span class="runner">${t.runner ? esc(t.runner) : '—'}</span></td>
+        <td class="num">${t.laps}</td>
+        <td class="num km">${t.km.toFixed(1)}</td>
+        <td class="num">${t.commits}</td>
+        <td class="num score">${t.score}</td>
+        <td class="num">${lapCell}</td>
+        <td class="num mono" style="font-size:15px">${fmtPace(t.paceSPerKm)}</td>
+      </tr>`;
+    }).join('');
   } catch {}
 }
+
+function renderGun() {
+  const label = document.getElementById('gunlabel');
+  const gun = document.getElementById('gun');
+  if (!board || (!board.startAt && !board.endAt)) { label.textContent = ''; gun.innerHTML = ''; return; }
+  const now = Date.now() + clockSkewMs;
+  const start = board.startAt ? new Date(board.startAt).getTime() : null;
+  const end = board.endAt ? new Date(board.endAt).getTime() : null;
+
+  let target = null;
+  if (start && now < start) { label.textContent = 'Starting gun'; target = start; }
+  else if (end && now < end) { label.textContent = 'Time left'; target = end; }
+  else if (end) {
+    label.textContent = '';
+    gun.innerHTML = '<div class="gun-cell gun-final"><b>FINAL</b><span>race over</span></div>';
+    return;
+  } else { label.textContent = 'Race is live'; gun.innerHTML = ''; return; }
+
+  let s = Math.max(0, Math.floor((target - now) / 1000));
+  const parts = [['days', 86400], ['hrs', 3600], ['min', 60], ['sec', 1]].map(([u, div]) => {
+    const v = Math.floor(s / div); s -= v * div; return [u, v];
+  }).filter(([u, v], i, a) => v > 0 || u === 'sec' || a.slice(0, i).some(([, pv]) => pv > 0));
+  gun.innerHTML = parts.map(([u, v]) =>
+    `<div class="gun-cell"><b>${String(v).padStart(u === 'days' ? 3 : 2, '0')}</b><span>${u}</span></div>`).join('');
+}
+
+async function loadBrands() {
+  try {
+    const files = await (await fetch('/api/brands')).json();
+    const imgs = files.map((f) => `<img src="${f}" alt="">`).join('');
+    document.getElementById('brands').innerHTML = imgs + imgs; // doubled for seamless marquee
+  } catch {}
+}
+
 setInterval(tick, 3000);
-setInterval(() => {
-  document.getElementById('clock').textContent = new Date().toLocaleTimeString();
-}, 1000);
-tick();
+setInterval(renderGun, 1000);
+tick(); loadBrands();
 </script>
 </body>
 </html>

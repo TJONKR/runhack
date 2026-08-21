@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
-import { pool, eventConfig } from './db.js';
+import { pool, eventConfig, eventStatus, teamScore } from './db.js';
+import { parseRepo } from './github.js';
 
 const router = Router();
 
@@ -12,7 +13,7 @@ router.get('/:slug/info', async (req, res) => {
   );
   if (!rows[0]) return res.status(404).json({ error: 'no such event' });
   const teams = await pool.query(
-    'SELECT id, name FROM teams WHERE event_id = $1 ORDER BY name',
+    "SELECT id, name, (repo_url IS NOT NULL AND repo_url <> '') AS has_repo FROM teams WHERE event_id = $1 ORDER BY name",
     [rows[0].id]
   );
   res.json({ slug: rows[0].slug, name: rows[0].name, teams: teams.rows });
@@ -33,6 +34,16 @@ router.post('/:slug/members', async (req, res) => {
     event.id,
   ]);
   if (!team.rows[0]) return res.status(404).json({ error: 'no such team in this event' });
+
+  // First runner to supply a repo sets the team's; after that it's admin-only.
+  const { repoUrl } = req.body;
+  if (repoUrl) {
+    if (!parseRepo(repoUrl)) return res.status(400).json({ error: 'repoUrl must be a github.com repo' });
+    await pool.query(
+      "UPDATE teams SET repo_url = $1 WHERE id = $2 AND (repo_url IS NULL OR repo_url = '')",
+      [repoUrl.trim(), teamId]
+    );
+  }
 
   const userId = crypto.randomBytes(12).toString('base64url');
   await pool.query(
@@ -66,46 +77,70 @@ router.get('/:slug/board', async (req, res) => {
   const config = eventConfig(event);
 
   const teams = await pool.query(
-    `SELECT t.id, t.name,
-            am.name AS runner_name, am.last_lap_s AS runner_last_lap_s, am.last_fix AS runner_last_fix,
-            COALESCE(l.laps, 0) AS laps
+    `SELECT t.id, t.name, t.repo_url, t.commit_count,
+            am.name AS runner_name, am.last_fix AS runner_last_fix,
+            ll.seconds AS last_lap_s, ll.counted AS last_lap_valid, ll.reject_reason AS last_lap_reason,
+            COALESCE(l.valid, 0) AS valid_laps, COALESCE(l.invalid, 0) AS invalid_laps
        FROM teams t
        LEFT JOIN members am ON am.id = t.active_member_id
        LEFT JOIN (
-         SELECT team_id, count(*) AS laps FROM laps
-          WHERE event_id = $1 AND counted GROUP BY team_id
+         SELECT team_id,
+                count(*) FILTER (WHERE counted) AS valid,
+                count(*) FILTER (WHERE NOT counted) AS invalid
+           FROM laps WHERE event_id = $1 GROUP BY team_id
        ) l ON l.team_id = t.id
+       LEFT JOIN LATERAL (
+         SELECT seconds, counted, reject_reason FROM laps
+          WHERE team_id = t.id ORDER BY finished_at DESC LIMIT 1
+       ) ll ON true
       WHERE t.event_id = $1`,
     [event.id]
   );
 
   const board = teams.rows
     .map((t) => {
-      const laps = Number(t.laps);
+      const laps = Number(t.valid_laps);
+      const km = +((laps * config.lapM) / 1000).toFixed(2);
+      const commits = Number(t.commit_count) || 0;
       const lastFixAgoS = t.runner_last_fix?.at
         ? Math.round((Date.now() - t.runner_last_fix.at) / 1000)
         : null;
       let status = 'idle';
-      if (t.runner_name) {
-        if (lastFixAgoS != null && lastFixAgoS <= 30) status = 'running';
-        else status = 'stopped';
-      }
-      const lastLapS = t.runner_last_lap_s;
+      if (t.runner_name) status = lastFixAgoS != null && lastFixAgoS <= 30 ? 'running' : 'stopped';
       return {
         teamId: t.id,
         team: t.name,
         runner: t.runner_name || null,
         status,
         laps,
-        km: +((laps * config.lapM) / 1000).toFixed(2),
-        lastLapS: lastLapS != null ? Math.round(lastLapS) : null,
-        paceSPerKm: lastLapS != null ? Math.round(lastLapS / (config.lapM / 1000)) : null,
+        invalidLaps: Number(t.invalid_laps),
+        km,
+        commits,
+        repo: t.repo_url || null,
+        score: teamScore(km, commits, config),
+        lastLap: t.last_lap_s != null
+          ? { seconds: Math.round(t.last_lap_s), valid: t.last_lap_valid, reason: t.last_lap_reason }
+          : null,
+        paceSPerKm:
+          t.last_lap_s != null && t.last_lap_valid
+            ? Math.round(t.last_lap_s / (config.lapM / 1000))
+            : null,
         lastPingAgoS: lastFixAgoS,
       };
     })
-    .sort((a, b) => b.laps - a.laps || a.team.localeCompare(b.team));
+    .sort((a, b) => b.score - a.score || b.km - a.km || a.team.localeCompare(b.team));
 
-  res.json({ event: event.name, slug: event.slug, lapM: config.lapM, teams: board });
+  res.json({
+    event: event.name,
+    slug: event.slug,
+    lapM: config.lapM,
+    scoreFormula: config.scoreFormula,
+    status: eventStatus(event),
+    startAt: event.start_at,
+    endAt: event.end_at,
+    serverNow: new Date().toISOString(),
+    teams: board,
+  });
 });
 
 export default router;

@@ -5,31 +5,78 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RUN/HACK admin</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
+  :root {
+    --paper: #F4F3EF; --navy: #08182F; --navy2: #0C2140; --blue: #1311D1;
+    --orange: #DD6A24; --gold: #F0BE2A; --sky: #3A90E6; --line: rgba(244,243,239,0.12);
+  }
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; display: flex; height: 100vh; }
-  #side { width: 380px; padding: 16px; overflow-y: auto; border-right: 1px solid #ddd; }
+  body { font-family: 'Geist', system-ui, sans-serif; margin: 0; display: flex; height: 100vh;
+         background: var(--navy); color: var(--paper); }
+  #side { width: 400px; overflow-y: auto; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
   #map { flex: 1; }
-  h1 { font-size: 18px; margin: 0 0 12px; }
-  h2 { font-size: 14px; margin: 20px 0 8px; text-transform: uppercase; color: #666; }
-  input, button, select { font: inherit; padding: 6px 8px; margin: 2px 0; }
-  input[type=text], input[type=number] { width: 100%; }
-  button { cursor: pointer; }
-  .zone-row, .team-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
-  .zone-row .idx { font-weight: 700; width: 20px; }
-  .muted { color: #888; font-size: 12px; }
+
+  .brand { background: var(--blue); padding: 16px 20px; border-bottom: 3px solid var(--gold); }
+  .wordmark { font-weight: 900; font-size: 24px; letter-spacing: -1px; }
+  .wordmark .slash { color: var(--orange); }
+  .brand small { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.2em;
+                 text-transform: uppercase; color: rgba(244,243,239,0.6); display: block; margin-top: 2px; }
+  .pad { padding: 16px 20px; }
+
+  h2 { font-family: 'Geist Mono', monospace; font-size: 11px; margin: 24px 0 10px; text-transform: uppercase;
+       letter-spacing: 0.2em; color: var(--sky); }
+  h2:first-child { margin-top: 0; }
+  input, button, select { font: inherit; padding: 8px 10px; margin: 2px 0; border-radius: 4px; }
+  input, select { width: 100%; background: var(--navy2); border: 1px solid var(--line); color: var(--paper); }
+  input:focus, select:focus { outline: 2px solid var(--sky); border-color: transparent; }
+  button { cursor: pointer; background: var(--navy2); border: 1px solid var(--line); color: var(--paper); }
+  button:hover { border-color: var(--sky); }
+  button.primary { background: var(--gold); border: 0; color: var(--navy); font-weight: 700; }
+  button.primary:hover { background: #ffd34d; }
+  .zone-row, .team-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+  .zone-row .idx { font-family: 'Geist Mono', monospace; font-weight: 600; width: 22px; }
+  .zone-row button, .team-row button { padding: 4px 8px; }
+  .muted { color: rgba(244,243,239,0.45); font-size: 12px; }
+  label.muted { display: block; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  #drawing-banner { background: #ffe9a8; padding: 8px; border-radius: 6px; display: none; margin: 8px 0; }
-  .url { font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; background: #f4f4f4; padding: 6px; border-radius: 4px; }
+  #drawing-banner { background: var(--gold); color: var(--navy); padding: 8px 10px; border-radius: 4px;
+                    display: none; margin: 8px 0; font-size: 13px; font-weight: 700; }
+  .url { font-family: 'Geist Mono', monospace; font-size: 11px; word-break: break-all;
+         background: var(--navy2); padding: 6px 8px; border-radius: 4px; margin: 4px 0 10px;
+         border: 1px solid var(--line); }
+
+  /* login gate */
+  #login { position: fixed; inset: 0; background: var(--blue); display: flex; align-items: center;
+           justify-content: center; z-index: 2000; }
+  #login .card { width: 340px; background: var(--navy); padding: 32px; border-radius: 8px;
+                 border-top: 4px solid var(--gold); }
+  #login .wordmark { font-size: 30px; }
+  #login small { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.2em;
+                 text-transform: uppercase; color: rgba(244,243,239,0.5); display: block; margin: 4px 0 20px; }
+  #loginErr { color: var(--orange); font-size: 13px; min-height: 18px; margin-top: 8px; }
+  .leaflet-container { background: #0C2140; }
 </style>
 </head>
 <body>
-<div id="side">
-  <h1>RUN/HACK admin</h1>
-  <div>
-    <input type="text" id="adminKey" placeholder="admin key">
-    <button onclick="saveKey()">Set key</button>
+
+<div id="login">
+  <div class="card">
+    <div class="wordmark">RUN<span class="slash">/</span>HACK</div>
+    <small>Race control · Admin</small>
+    <input type="password" id="adminKey" placeholder="admin password" onkeydown="if(event.key==='Enter')login()">
+    <button class="primary" style="width:100%;margin-top:12px" onclick="login()">Sign in →</button>
+    <div id="loginErr"></div>
   </div>
+</div>
+
+<div id="side">
+  <div class="brand">
+    <div class="wordmark">RUN<span class="slash">/</span>HACK</div>
+    <small>Race control</small>
+  </div>
+  <div class="pad">
 
   <h2>Event</h2>
   <select id="eventSelect" onchange="loadEvent(this.value)"></select>
@@ -42,16 +89,19 @@
     <label class="muted">max lap s <input type="number" id="cfgMax" value="168"></label>
     <label class="muted">entry fixes <input type="number" id="cfgEntry" value="1"></label>
     <label class="muted">exit fixes <input type="number" id="cfgExit" value="2"></label>
+    <label class="muted">starts <input type="datetime-local" id="evStart"></label>
+    <label class="muted">ends <input type="datetime-local" id="evEnd"></label>
   </div>
-  <p class="muted">Dev tip: for a walkable test event set min lap ~10 and max lap ~1200.</p>
+  <p class="muted">Laps outside start–end are recorded but invalid. Commits count from start.
+    Dev tip: for a walkable test event set min lap ~10 and max lap ~1200.</p>
 
-  <h2>Zones (in lap order, zone 0 = start/finish)</h2>
-  <div id="drawing-banner">Click map corners, then <b>Finish zone</b>.</div>
+  <h2>Zones <span style="color:rgba(244,243,239,0.4)">(lap order · zone 0 = start/finish)</span></h2>
+  <div id="drawing-banner">Click map corners, then Finish zone.</div>
   <div id="zoneList"></div>
   <button onclick="startZone()">+ Draw zone</button>
-  <button id="finishZoneBtn" onclick="finishZone()" style="display:none">Finish zone</button>
+  <button id="finishZoneBtn" class="primary" onclick="finishZone()" style="display:none">Finish zone</button>
   <br><br>
-  <button onclick="saveEvent()" style="font-weight:700">Save event</button>
+  <button class="primary" onclick="saveEvent()">Save event</button>
   <span id="saveMsg" class="muted"></span>
 
   <h2>Teams</h2>
@@ -59,21 +109,50 @@
   <input type="text" id="teamName" placeholder="team name">
   <button onclick="addTeam()">Add team</button>
 
+  <h2>Simulator</h2>
+  <p class="muted">Fake runner looping the drawn zones from this tab — registers a real member and
+    posts to /ingest, exercising the whole pipeline.</p>
+  <select id="simTeam"></select>
+  <input type="text" id="simName" placeholder="sim runner name" value="Sim Runner">
+  <div class="grid2">
+    <label class="muted">lap seconds <input type="number" id="simLapS" value="120"></label>
+    <label class="muted">fix interval s <input type="number" id="simInterval" value="2"></label>
+    <label class="muted">gps noise m <input type="number" id="simNoise" value="6"></label>
+    <label class="muted">accuracy m <input type="number" id="simAcc" value="10"></label>
+  </div>
+  <button onclick="startSim()">▶ Start sim runner</button>
+  <div id="simList"></div>
+
   <h2>Links</h2>
   <div id="links" class="muted">Save an event first.</div>
+
+  </div>
 </div>
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 let key = localStorage.getItem('adminKey') || '';
-document.getElementById('adminKey').value = key;
-function saveKey() {
-  key = document.getElementById('adminKey').value.trim();
-  localStorage.setItem('adminKey', key);
-  loadEvents();
-}
 const H = () => ({ 'Content-Type': 'application/json', Authorization: 'Bearer ' + key });
+
+async function login() {
+  key = document.getElementById('adminKey').value.trim();
+  const r = await fetch('/api/admin/events', { headers: H() });
+  if (!r.ok) {
+    document.getElementById('loginErr').textContent = 'Wrong password.';
+    return;
+  }
+  localStorage.setItem('adminKey', key);
+  document.getElementById('login').style.display = 'none';
+  renderEventList(await r.json());
+}
+async function boot() {
+  if (!key) return; // show login
+  const r = await fetch('/api/admin/events', { headers: H() });
+  if (!r.ok) { localStorage.removeItem('adminKey'); key = ''; return; }
+  document.getElementById('login').style.display = 'none';
+  renderEventList(await r.json());
+}
 
 // London Marathon Community Track
 const map = L.map('map').setView([51.5385, -0.0166], 17);
@@ -85,7 +164,7 @@ let zones = [];          // [{name, polygon: [[lat,lng],...]}]
 let zoneLayers = [];
 let drawing = null;      // {points, markers, line}
 
-function colour(i) { return i === 0 ? '#e63946' : '#457b9d'; }
+function colour(i) { return i === 0 ? '#DD6A24' : '#3A90E6'; }
 
 function redrawZones() {
   zoneLayers.forEach((l) => map.removeLayer(l));
@@ -142,13 +221,14 @@ function finishZone() {
   redrawZones();
 }
 
-async function loadEvents() {
-  const r = await fetch('/api/admin/events', { headers: H() });
-  if (!r.ok) return alert('Bad admin key?');
-  const events = await r.json();
+function renderEventList(events) {
   const sel = document.getElementById('eventSelect');
   sel.innerHTML = '<option value="">— new event —</option>' +
     events.map((e) => `<option value="${e.slug}">${e.name}</option>`).join('');
+}
+async function loadEvents() {
+  const r = await fetch('/api/admin/events', { headers: H() });
+  if (r.ok) renderEventList(await r.json());
 }
 async function loadEvent(slug) {
   if (!slug) { zones = []; redrawZones(); renderTeams([]); return; }
@@ -160,11 +240,18 @@ async function loadEvent(slug) {
   cfgLapM.value = c.lapM ?? 400; cfgAcc.value = c.maxAccuracyM ?? 40;
   cfgMin.value = c.minLapS ?? 55; cfgMax.value = c.maxLapS ?? 168;
   cfgEntry.value = c.entryFixes ?? 1; cfgExit.value = c.exitFixes ?? 2;
+  evStart.value = toLocalInput(e.start_at); evEnd.value = toLocalInput(e.end_at);
   zones = e.zones || [];
   redrawZones();
   if (zones[0]?.polygon?.[0]) map.setView(zones[0].polygon[0], 17);
   renderTeams(e.teams || []);
   renderLinks(e.slug);
+}
+function toLocalInput(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
 }
 async function saveEvent() {
   const slug = evSlug.value.trim();
@@ -172,6 +259,8 @@ async function saveEvent() {
     slug,
     name: evName.value.trim(),
     zones,
+    startAt: evStart.value ? new Date(evStart.value).toISOString() : null,
+    endAt: evEnd.value ? new Date(evEnd.value).toISOString() : null,
     config: {
       lapM: +cfgLapM.value, maxAccuracyM: +cfgAcc.value,
       minLapS: +cfgMin.value, maxLapS: +cfgMax.value,
@@ -185,8 +274,18 @@ async function saveEvent() {
 function renderTeams(teams) {
   const el = document.getElementById('teamList');
   el.innerHTML = teams.map((t) =>
-    `<div class="team-row"><span style="flex:1">${t.name} <span class="muted">(${t.member_count} joins)</span></span>
-     <button onclick="delTeam(${t.id})">✕</button></div>`).join('') || '<div class="muted">none yet</div>';
+    `<div class="team-row"><span style="flex:1">${t.name} <span class="muted">(${t.member_count} joins · ${t.commit_count ?? 0} commits)</span></span>
+     <button onclick="delTeam(${t.id})">✕</button></div>
+     <div class="team-row"><input type="text" placeholder="github repo url" value="${t.repo_url || ''}"
+       onchange="setRepo(${t.id}, this.value)" style="flex:1;font-size:12px"></div>`).join('') ||
+    '<div class="muted">none yet</div>';
+  const sim = document.getElementById('simTeam');
+  sim.innerHTML = teams.map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
+}
+async function setRepo(teamId, repoUrl) {
+  await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${teamId}`, {
+    method: 'PATCH', headers: H(), body: JSON.stringify({ repoUrl }),
+  });
 }
 async function addTeam() {
   const slug = evSlug.value.trim();
@@ -200,13 +299,80 @@ async function delTeam(id) {
   await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${id}`, { method: 'DELETE', headers: H() });
   loadEvent(evSlug.value.trim());
 }
+
+// ---- Simulator: fake runner looping through the zone centroids ----
+let sims = [];
+function centroid(polygon) {
+  const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length;
+  const lng = polygon.reduce((s, p) => s + p[1], 0) / polygon.length;
+  return [lat, lng];
+}
+function metersBetween(a, b) {
+  const dLat = (b[0] - a[0]) * 111_320;
+  const dLng = (b[1] - a[1]) * 111_320 * Math.cos((a[0] * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
+}
+async function startSim() {
+  if (zones.length < 2) return alert('Draw at least 2 zones first (and save the event).');
+  const slug = evSlug.value.trim();
+  const teamId = +document.getElementById('simTeam').value;
+  const name = document.getElementById('simName').value.trim() || 'Sim Runner';
+  const lapS = +document.getElementById('simLapS').value;
+  const intervalS = Math.max(1, +document.getElementById('simInterval').value);
+  const noiseM = +document.getElementById('simNoise').value;
+  const acc = +document.getElementById('simAcc').value;
+
+  const r = await fetch(`/api/${slug}/members`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ teamId, name }),
+  });
+  if (!r.ok) return alert('register failed: ' + (await r.text()));
+  const { userId } = await r.json();
+
+  // Closed loop through zone centroids in lap order.
+  const path = [...zones.map((z) => centroid(z.polygon)), centroid(zones[0].polygon)];
+  const segLens = path.slice(0, -1).map((p, i) => metersBetween(p, path[i + 1]));
+  const totalLen = segLens.reduce((a, b) => a + b, 0);
+
+  const marker = L.circleMarker(path[0], { radius: 7, color: '#DD6A24', fillOpacity: 0.9 }).addTo(map);
+  const started = Date.now();
+  const sim = { userId, name, marker, timer: null };
+  sim.timer = setInterval(async () => {
+    const t = (Date.now() - started) / 1000;
+    let dist = ((t % lapS) / lapS) * totalLen;
+    let i = 0;
+    while (dist > segLens[i] && i < segLens.length - 1) dist -= segLens[i++];
+    const f = segLens[i] ? dist / segLens[i] : 0;
+    const jitter = () => ((Math.random() - 0.5) * 2 * noiseM) / 111_320;
+    const lat = path[i][0] + (path[i + 1][0] - path[i][0]) * f + jitter();
+    const lng = path[i][1] + (path[i + 1][1] - path[i][1]) * f + jitter();
+    marker.setLatLng([lat, lng]);
+    try {
+      await fetch(`/ingest/${userId}?lat=${lat}&lon=${lng}&timestamp=${Math.floor(Date.now() / 1000)}&accuracy=${acc}`);
+    } catch {}
+  }, intervalS * 1000);
+  sims.push(sim);
+  renderSims();
+}
+function stopSim(userId) {
+  const s = sims.find((x) => x.userId === userId);
+  if (s) { clearInterval(s.timer); map.removeLayer(s.marker); }
+  sims = sims.filter((x) => x.userId !== userId);
+  renderSims();
+}
+function renderSims() {
+  document.getElementById('simList').innerHTML = sims.map((s) =>
+    `<div class="team-row"><span style="flex:1">● ${s.name} <span class="muted">${s.userId}</span></span>
+     <button onclick="stopSim('${s.userId}')">⏹ stop</button></div>`).join('');
+}
+
 function renderLinks(slug) {
   document.getElementById('links').innerHTML = `
     Join (print this as the QR): <div class="url">${location.origin}/${slug}/join</div>
     Board: <div class="url">${location.origin}/${slug}/board</div>
     API: <div class="url">${location.origin}/api/${slug}/board</div>`;
 }
-if (key) loadEvents();
+boot();
 </script>
 </body>
 </html>

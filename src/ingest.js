@@ -62,7 +62,7 @@ export async function ingestHandler(req, res) {
   if (!fix) return res.status(400).send('no coordinates');
 
   const { rows } = await pool.query(
-    `SELECT m.*, e.zones, e.config AS event_config
+    `SELECT m.*, e.zones, e.config AS event_config, e.start_at, e.end_at
        FROM members m JOIN events e ON e.id = m.event_id
       WHERE m.user_id = $1`,
     [userId]
@@ -105,6 +105,20 @@ export async function ingestHandler(req, res) {
   const config = eventConfig({ zones: member.zones, config: member.event_config });
   const state = member.state && member.state.nextZone !== undefined ? member.state : createState();
   const { state: newState, events } = processFix(state, fix, config);
+
+  // Laps finished outside the event window are recorded but invalid — useful
+  // for pre-start warmups and system checks without polluting the board.
+  const startMs = member.start_at ? new Date(member.start_at).getTime() : null;
+  const endMs = member.end_at ? new Date(member.end_at).getTime() : null;
+  for (const ev of events) {
+    if (ev.type === 'lap' && ev.counted) {
+      if ((startMs && fix.timestampMs < startMs) || (endMs && fix.timestampMs > endMs)) {
+        ev.counted = false;
+        ev.reason = 'outside_window';
+        newState.lapCount -= 1;
+      }
+    }
+  }
 
   for (const ev of events) {
     if (ev.type === 'lap') {

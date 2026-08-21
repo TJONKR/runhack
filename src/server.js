@@ -1,10 +1,12 @@
 import express from 'express';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { initDb } from './db.js';
 import adminRouter from './admin.js';
 import apiRouter from './api.js';
 import { ingestHandler } from './ingest.js';
+import { startGithubPoller } from './github.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', 'public');
@@ -20,6 +22,17 @@ app.get('/healthz', (req, res) => res.send('ok'));
 app.all('/ingest/:userId', (req, res, next) => ingestHandler(req, res).catch(next));
 
 app.use('/api/admin', adminRouter);
+
+// Sponsor/brand strip: drop logo files into public/brands/ and they appear on
+// the board. Order by filename (prefix 01-, 02-, ... to control it).
+app.get('/api/brands', (req, res) => {
+  const dir = path.join(publicDir, 'brands');
+  const files = fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter((f) => /\.(svg|png|jpe?g|webp)$/i.test(f)).sort()
+    : [];
+  res.json(files.map((f) => `/brands/${f}`));
+});
+
 app.use('/api', apiRouter);
 
 app.get('/admin', (req, res) => res.sendFile(path.join(publicDir, 'admin.html')));
@@ -34,4 +47,5 @@ app.use((err, req, res, next) => {
 
 const port = process.env.PORT || 3000;
 await initDb();
+startGithubPoller();
 app.listen(port, () => console.log(`runhack server on :${port}`));

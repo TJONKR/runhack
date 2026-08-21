@@ -64,7 +64,31 @@ export async function initDb() {
       received_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS points_member_time ON points (member_id, fixed_at);
+
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS start_at timestamptz;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS end_at timestamptz;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS repo_url text;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS commit_count integer NOT NULL DEFAULT 0;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS commits_checked_at timestamptz;
   `);
+}
+
+export function eventStatus(event, now = Date.now()) {
+  const start = event.start_at ? new Date(event.start_at).getTime() : null;
+  const end = event.end_at ? new Date(event.end_at).getTime() : null;
+  if (start && now < start) return 'upcoming';
+  if (end && now > end) return 'finished';
+  return 'live';
+}
+
+// Rank score. Formula lives in event config so it can change without code:
+//   scoreFormula: 'km_x_commits' (default, the event's "built x ran")
+//              or 'km_plus_commits' with commitWeight (score = km + commits * weight)
+export function teamScore(km, commits, config) {
+  if ((config.scoreFormula ?? 'km_x_commits') === 'km_plus_commits') {
+    return +(km + commits * (config.commitWeight ?? 0.1)).toFixed(2);
+  }
+  return +(km * commits).toFixed(2);
 }
 
 // Per-event lap rules, with defaults for a 400m track and the 7:00/km floor
@@ -78,6 +102,8 @@ export function eventConfig(event) {
     entryFixes: c.entryFixes ?? 1,
     exitFixes: c.exitFixes ?? 2,
     maxAccuracyM: c.maxAccuracyM ?? 40,
+    scoreFormula: c.scoreFormula ?? 'km_x_commits',
+    commitWeight: c.commitWeight ?? 0.1,
     zones: event.zones || [],
   };
 }

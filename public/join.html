@@ -35,6 +35,10 @@
     <select id="team"></select>
     <label>Your name</label>
     <input id="name" placeholder="runner name" autocomplete="off">
+    <div id="repoWrap" style="display:none">
+      <label>Team GitHub repo (public — commits count toward your score)</label>
+      <input id="repo" placeholder="https://github.com/you/project" autocomplete="off" inputmode="url">
+    </div>
     <button onclick="register()">I'm running next →</button>
     <p class="muted">Each runner registers again at every handover — a new registration takes over
       the team's tracking and freezes the previous runner.</p>
@@ -80,16 +84,23 @@ async function init() {
     const match = info.teams.find((t) => String(t.id) === preTeam || t.name === preTeam);
     if (match) sel.value = match.id;
   }
+  const updateRepoField = () => {
+    const team = info.teams.find((t) => String(t.id) === sel.value);
+    document.getElementById('repoWrap').style.display = team && !team.has_repo ? 'block' : 'none';
+  };
+  sel.onchange = updateRepoField;
+  updateRepoField();
 }
 
 async function register() {
   const name = document.getElementById('name').value.trim();
   const teamId = +document.getElementById('team').value;
   if (!name) return alert('Enter your name');
+  const repoUrl = document.getElementById('repo').value.trim() || undefined;
   const r = await fetch(`/api/${slug}/members`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ teamId, name }),
+    body: JSON.stringify({ teamId, name, repoUrl }),
   });
   if (!r.ok) return alert('Registration failed: ' + (await r.text()));
   userId = (await r.json()).userId;
