@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RUN/HACK board</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; background: #0f1115; color: #eee; }
+  header { padding: 20px 32px; display: flex; justify-content: space-between; align-items: baseline; }
+  h1 { font-size: 28px; margin: 0; }
+  .clock { color: #888; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-size: 22px; }
+  th { text-align: left; color: #777; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+       padding: 8px 16px; }
+  td { padding: 14px 16px; border-top: 1px solid #1e2229; font-variant-numeric: tabular-nums; }
+  td.rank { color: #666; width: 40px; }
+  td.team { font-weight: 700; }
+  td.km { font-weight: 700; color: #e63946; }
+  .runner { color: #aaa; font-size: 16px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+  .running { background: #4ade80; } .stopped { background: #f59e0b; } .idle { background: #444; }
+</style>
+</head>
+<body>
+<header><h1 id="title">RUN/HACK</h1><div class="clock" id="clock"></div></header>
+<table>
+  <thead><tr><th></th><th>Team</th><th>Runner</th><th>Laps</th><th>KM</th><th>Last lap</th><th>Pace</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<script>
+const slug = location.pathname.split('/')[1];
+function fmtPace(s) {
+  if (s == null) return '—';
+  return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}/km`;
+}
+async function tick() {
+  try {
+    const r = await fetch(`/api/${slug}/board`);
+    if (!r.ok) return;
+    const b = await r.json();
+    document.getElementById('title').textContent = b.event;
+    document.getElementById('rows').innerHTML = b.teams.map((t, i) => `
+      <tr>
+        <td class="rank">${i + 1}</td>
+        <td class="team">${t.team}</td>
+        <td><span class="dot ${t.status}"></span><span class="runner">${t.runner ?? '—'}</span></td>
+        <td>${t.laps}</td>
+        <td class="km">${t.km.toFixed(1)}</td>
+        <td>${t.lastLapS != null ? t.lastLapS + 's' : '—'}</td>
+        <td>${fmtPace(t.paceSPerKm)}</td>
+      </tr>`).join('');
+  } catch {}
+}
+setInterval(tick, 3000);
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString();
+}, 1000);
+tick();
+</script>
+</body>
+</html>

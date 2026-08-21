@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RUN/HACK admin</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; display: flex; height: 100vh; }
+  #side { width: 380px; padding: 16px; overflow-y: auto; border-right: 1px solid #ddd; }
+  #map { flex: 1; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  h2 { font-size: 14px; margin: 20px 0 8px; text-transform: uppercase; color: #666; }
+  input, button, select { font: inherit; padding: 6px 8px; margin: 2px 0; }
+  input[type=text], input[type=number] { width: 100%; }
+  button { cursor: pointer; }
+  .zone-row, .team-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+  .zone-row .idx { font-weight: 700; width: 20px; }
+  .muted { color: #888; font-size: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #drawing-banner { background: #ffe9a8; padding: 8px; border-radius: 6px; display: none; margin: 8px 0; }
+  .url { font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; background: #f4f4f4; padding: 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="side">
+  <h1>RUN/HACK admin</h1>
+  <div>
+    <input type="text" id="adminKey" placeholder="admin key">
+    <button onclick="saveKey()">Set key</button>
+  </div>
+
+  <h2>Event</h2>
+  <select id="eventSelect" onchange="loadEvent(this.value)"></select>
+  <input type="text" id="evSlug" placeholder="slug (e.g. london)">
+  <input type="text" id="evName" placeholder="name (e.g. RUN/HACK London)">
+  <div class="grid2">
+    <label class="muted">lap metres <input type="number" id="cfgLapM" value="400"></label>
+    <label class="muted">max accuracy m <input type="number" id="cfgAcc" value="40"></label>
+    <label class="muted">min lap s <input type="number" id="cfgMin" value="55"></label>
+    <label class="muted">max lap s <input type="number" id="cfgMax" value="168"></label>
+    <label class="muted">entry fixes <input type="number" id="cfgEntry" value="1"></label>
+    <label class="muted">exit fixes <input type="number" id="cfgExit" value="2"></label>
+  </div>
+  <p class="muted">Dev tip: for a walkable test event set min lap ~10 and max lap ~1200.</p>
+
+  <h2>Zones (in lap order, zone 0 = start/finish)</h2>
+  <div id="drawing-banner">Click map corners, then <b>Finish zone</b>.</div>
+  <div id="zoneList"></div>
+  <button onclick="startZone()">+ Draw zone</button>
+  <button id="finishZoneBtn" onclick="finishZone()" style="display:none">Finish zone</button>
+  <br><br>
+  <button onclick="saveEvent()" style="font-weight:700">Save event</button>
+  <span id="saveMsg" class="muted"></span>
+
+  <h2>Teams</h2>
+  <div id="teamList"></div>
+  <input type="text" id="teamName" placeholder="team name">
+  <button onclick="addTeam()">Add team</button>
+
+  <h2>Links</h2>
+  <div id="links" class="muted">Save an event first.</div>
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+let key = localStorage.getItem('adminKey') || '';
+document.getElementById('adminKey').value = key;
+function saveKey() {
+  key = document.getElementById('adminKey').value.trim();
+  localStorage.setItem('adminKey', key);
+  loadEvents();
+}
+const H = () => ({ 'Content-Type': 'application/json', Authorization: 'Bearer ' + key });
+
+// London Marathon Community Track
+const map = L.map('map').setView([51.5385, -0.0166], 17);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 20, attribution: '&copy; OpenStreetMap',
+}).addTo(map);
+
+let zones = [];          // [{name, polygon: [[lat,lng],...]}]
+let zoneLayers = [];
+let drawing = null;      // {points, markers, line}
+
+function colour(i) { return i === 0 ? '#e63946' : '#457b9d'; }
+
+function redrawZones() {
+  zoneLayers.forEach((l) => map.removeLayer(l));
+  zoneLayers = zones.map((z, i) =>
+    L.polygon(z.polygon, { color: colour(i), weight: 2 })
+      .bindTooltip(`${i}: ${z.name}`, { permanent: true, direction: 'center' })
+      .addTo(map)
+  );
+  const list = document.getElementById('zoneList');
+  list.innerHTML = '';
+  zones.forEach((z, i) => {
+    const row = document.createElement('div');
+    row.className = 'zone-row';
+    row.innerHTML = `<span class="idx" style="color:${colour(i)}">${i}</span>
+      <input type="text" value="${z.name}" onchange="zones[${i}].name=this.value" style="flex:1">
+      <button onclick="moveZone(${i},-1)">↑</button>
+      <button onclick="moveZone(${i},1)">↓</button>
+      <button onclick="zones.splice(${i},1);redrawZones()">✕</button>`;
+    list.appendChild(row);
+  });
+}
+function moveZone(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= zones.length) return;
+  [zones[i], zones[j]] = [zones[j], zones[i]];
+  redrawZones();
+}
+function startZone() {
+  drawing = { points: [], markers: [], line: null };
+  document.getElementById('drawing-banner').style.display = 'block';
+  document.getElementById('finishZoneBtn').style.display = 'inline-block';
+}
+map.on('click', (e) => {
+  if (!drawing) return;
+  drawing.points.push([e.latlng.lat, e.latlng.lng]);
+  drawing.markers.push(L.circleMarker(e.latlng, { radius: 4 }).addTo(map));
+  if (drawing.line) map.removeLayer(drawing.line);
+  drawing.line = L.polyline(drawing.points, { dashArray: '4' }).addTo(map);
+});
+function finishZone() {
+  if (drawing && drawing.points.length >= 3) {
+    zones.push({
+      name: zones.length === 0 ? 'start/finish' : `checkpoint ${zones.length}`,
+      polygon: drawing.points,
+    });
+  }
+  if (drawing) {
+    drawing.markers.forEach((m) => map.removeLayer(m));
+    if (drawing.line) map.removeLayer(drawing.line);
+  }
+  drawing = null;
+  document.getElementById('drawing-banner').style.display = 'none';
+  document.getElementById('finishZoneBtn').style.display = 'none';
+  redrawZones();
+}
+
+async function loadEvents() {
+  const r = await fetch('/api/admin/events', { headers: H() });
+  if (!r.ok) return alert('Bad admin key?');
+  const events = await r.json();
+  const sel = document.getElementById('eventSelect');
+  sel.innerHTML = '<option value="">— new event —</option>' +
+    events.map((e) => `<option value="${e.slug}">${e.name}</option>`).join('');
+}
+async function loadEvent(slug) {
+  if (!slug) { zones = []; redrawZones(); renderTeams([]); return; }
+  const r = await fetch('/api/admin/events/' + slug, { headers: H() });
+  const e = await r.json();
+  document.getElementById('evSlug').value = e.slug;
+  document.getElementById('evName').value = e.name;
+  const c = e.config || {};
+  cfgLapM.value = c.lapM ?? 400; cfgAcc.value = c.maxAccuracyM ?? 40;
+  cfgMin.value = c.minLapS ?? 55; cfgMax.value = c.maxLapS ?? 168;
+  cfgEntry.value = c.entryFixes ?? 1; cfgExit.value = c.exitFixes ?? 2;
+  zones = e.zones || [];
+  redrawZones();
+  if (zones[0]?.polygon?.[0]) map.setView(zones[0].polygon[0], 17);
+  renderTeams(e.teams || []);
+  renderLinks(e.slug);
+}
+async function saveEvent() {
+  const slug = evSlug.value.trim();
+  const body = {
+    slug,
+    name: evName.value.trim(),
+    zones,
+    config: {
+      lapM: +cfgLapM.value, maxAccuracyM: +cfgAcc.value,
+      minLapS: +cfgMin.value, maxLapS: +cfgMax.value,
+      entryFixes: +cfgEntry.value, exitFixes: +cfgExit.value,
+    },
+  };
+  const r = await fetch('/api/admin/events', { method: 'POST', headers: H(), body: JSON.stringify(body) });
+  document.getElementById('saveMsg').textContent = r.ok ? 'saved ✓' : 'failed: ' + (await r.text());
+  if (r.ok) { await loadEvents(); eventSelect.value = slug; renderLinks(slug); loadEvent(slug); }
+}
+function renderTeams(teams) {
+  const el = document.getElementById('teamList');
+  el.innerHTML = teams.map((t) =>
+    `<div class="team-row"><span style="flex:1">${t.name} <span class="muted">(${t.member_count} joins)</span></span>
+     <button onclick="delTeam(${t.id})">✕</button></div>`).join('') || '<div class="muted">none yet</div>';
+}
+async function addTeam() {
+  const slug = evSlug.value.trim();
+  await fetch(`/api/admin/events/${slug}/teams`, {
+    method: 'POST', headers: H(), body: JSON.stringify({ name: teamName.value.trim() }),
+  });
+  teamName.value = '';
+  loadEvent(slug);
+}
+async function delTeam(id) {
+  await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${id}`, { method: 'DELETE', headers: H() });
+  loadEvent(evSlug.value.trim());
+}
+function renderLinks(slug) {
+  document.getElementById('links').innerHTML = `
+    Join (print this as the QR): <div class="url">${location.origin}/${slug}/join</div>
+    Board: <div class="url">${location.origin}/${slug}/board</div>
+    API: <div class="url">${location.origin}/api/${slug}/board</div>`;
+}
+if (key) loadEvents();
+</script>
+</body>
+</html>

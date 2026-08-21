@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: runhack
+    runtime: node
+    plan: starter # free instances spin down when idle — fatal for live ingest
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: ADMIN_KEY
+        sync: false # set in the Render dashboard
+      - key: DATABASE_URL
+        fromDatabase:
+          name: runhack-db
+          property: connectionString
+
+databases:
+  - name: runhack-db
+    plan: basic-256mb
