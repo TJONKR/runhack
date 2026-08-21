@@ -26,4 +26,7 @@ test('event status from window', () => {
   assert.equal(eventStatus(ev, Date.parse('2026-08-29T09:00:00Z')), 'upcoming');
   assert.equal(eventStatus(ev, Date.parse('2026-08-29T19:00:00Z')), 'finished');
   assert.equal(eventStatus({}, now), 'live');
+  assert.equal(eventStatus({ ...ev, paused_at: '2026-08-29T11:00:00Z' }, now), 'paused');
+  // pause flag is irrelevant once finished
+  assert.equal(eventStatus({ ...ev, paused_at: '2026-08-29T11:00:00Z' }, Date.parse('2026-08-29T19:00:00Z')), 'finished');
 });

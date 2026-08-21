@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RUN/HACK team</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root { --paper: #F4F3EF; --navy: #08182F; --blue: #1311D1; --orange: #DD6A24; --gold: #F0BE2A; --sky: #3A90E6; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy); color: var(--paper); }
+  header { background: var(--blue); padding: 14px 24px; border-bottom: 3px solid var(--gold);
+           display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  .wordmark { font-weight: 900; font-size: 24px; letter-spacing: -1px; }
+  .wordmark .slash { color: var(--orange); }
+  .eventname { font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.15em;
+               text-transform: uppercase; color: rgba(244,243,239,0.7); }
+  main { max-width: 900px; margin: 0 auto; padding: 28px 24px; display: grid;
+         grid-template-columns: 300px 1fr; gap: 36px; }
+  @media (max-width: 720px) { main { grid-template-columns: 1fr; } }
+  h1 { font-size: 40px; font-weight: 900; letter-spacing: -1px; margin: 0 0 4px; }
+  .mono { font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.15em;
+          text-transform: uppercase; color: rgba(244,243,239,0.5); }
+  .qr { background: var(--paper); border-radius: 8px; padding: 14px; }
+  .qr img { display: block; width: 100%; }
+  .qr-label { text-align: center; margin-top: 10px; font-family: 'Geist Mono', monospace;
+              font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: rgba(244,243,239,0.6); }
+  .stats { display: flex; gap: 2px; margin: 18px 0 26px; flex-wrap: wrap; }
+  .stat { background: rgba(244,243,239,0.06); padding: 10px 18px; min-width: 90px; }
+  .stat b { display: block; font-family: 'Geist Mono', monospace; font-size: 26px; font-weight: 600; }
+  .stat.score b { color: var(--gold); }
+  .stat span { font-family: 'Geist Mono', monospace; font-size: 9px; letter-spacing: 0.2em;
+               text-transform: uppercase; color: rgba(244,243,239,0.5); }
+  .member { display: flex; align-items: center; gap: 10px; padding: 10px 0;
+            border-top: 1px solid rgba(244,243,239,0.1); }
+  .member .name { font-weight: 700; flex: 1; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .dot.active { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+  .dot.frozen { background: #333f52; }
+  .dot.idle { background: var(--gold); }
+  .tag { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.15em;
+         text-transform: uppercase; color: rgba(244,243,239,0.5); }
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">RUN<span class="slash">/</span>HACK</div>
+  <div class="eventname" id="eventname"></div>
+</header>
+<main>
+  <div>
+    <div class="qr"><img id="qr" alt="team join QR"></div>
+    <div class="qr-label">Scan to run for this team</div>
+  </div>
+  <div>
+    <h1 id="teamname"></h1>
+    <div class="mono" id="repo"></div>
+    <div class="stats">
+      <div class="stat"><b id="laps">0</b><span>laps</span></div>
+      <div class="stat"><b id="km">0.0</b><span>km</span></div>
+      <div class="stat"><b id="commits">0</b><span>commits</span></div>
+      <div class="stat score"><b id="score">0</b><span>score</span></div>
+    </div>
+    <div class="mono" style="margin-bottom:6px">Runners</div>
+    <div id="members"></div>
+  </div>
+</main>
+<script>
+const [, slug, , teamId] = location.pathname.split('/');
+const joinUrl = `${location.origin}/${slug}/join?team=${teamId}`;
+document.getElementById('qr').src = `/qr.svg?text=${encodeURIComponent(joinUrl)}`;
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function tick() {
+  try {
+    const r = await fetch(`/api/${slug}/team/${teamId}`);
+    if (!r.ok) return;
+    const t = await r.json();
+    document.getElementById('eventname').textContent = t.event;
+    document.getElementById('teamname').textContent = t.team;
+    document.getElementById('repo').textContent = t.repo ? t.repo.replace('https://github.com/', 'github.com/') : 'no repo connected yet';
+    laps.textContent = t.laps; km.textContent = t.km.toFixed(1);
+    commits.textContent = t.commits; score.textContent = t.score;
+    document.getElementById('members').innerHTML = t.members.map((m) => {
+      const stale = m.lastPingAgoS == null || m.lastPingAgoS > 60;
+      const cls = m.active && !stale ? 'active' : m.frozen ? 'frozen' : 'idle';
+      const tag = m.active ? (stale ? 'signal lost' : 'on track') : m.frozen ? 'done' : m.connected ? 'connected' : 'not connected';
+      const ping = m.active && !stale ? ` · ping ${m.lastPingAgoS}s` : '';
+      return `<div class="member"><span class="dot ${cls}"></span>
+        <span class="name">${esc(m.name)}</span>
+        <span class="tag">${m.laps} ${m.laps === 1 ? 'lap' : 'laps'} · ${tag}${ping}</span></div>`;
+    }).join('') || '<div class="tag">Nobody yet — scan the QR</div>';
+  } catch {}
+}
+setInterval(tick, 3000);
+tick();
+</script>
+</body>
+</html>

@@ -69,6 +69,56 @@ router.get('/member/:userId/status', async (req, res) => {
   });
 });
 
+// Team detail for the per-team page: roster with live status, no secrets.
+router.get('/:slug/team/:teamId', async (req, res) => {
+  const ev = await pool.query('SELECT * FROM events WHERE slug = $1', [req.params.slug]);
+  const event = ev.rows[0];
+  if (!event) return res.status(404).json({ error: 'no such event' });
+  const t = await pool.query(
+    'SELECT id, name, repo_url, commit_count, active_member_id FROM teams WHERE id = $1 AND event_id = $2',
+    [req.params.teamId, event.id]
+  );
+  const team = t.rows[0];
+  if (!team) return res.status(404).json({ error: 'no such team' });
+
+  const members = await pool.query(
+    `SELECT m.id, m.name, m.activated_at, m.frozen_at, m.last_fix,
+            COALESCE(l.laps, 0) AS laps
+       FROM members m
+       LEFT JOIN (SELECT member_id, count(*) AS laps FROM laps WHERE counted GROUP BY member_id) l
+         ON l.member_id = m.id
+      WHERE m.team_id = $1 ORDER BY m.created_at DESC`,
+    [team.id]
+  );
+  const lapAgg = await pool.query(
+    'SELECT count(*) FILTER (WHERE counted) AS valid FROM laps WHERE team_id = $1',
+    [team.id]
+  );
+  const config = eventConfig(event);
+  const laps = Number(lapAgg.rows[0].valid);
+  const km = +((laps * config.lapM) / 1000).toFixed(2);
+  res.json({
+    event: event.name,
+    slug: event.slug,
+    status: eventStatus(event),
+    team: team.name,
+    teamId: team.id,
+    repo: team.repo_url || null,
+    commits: Number(team.commit_count) || 0,
+    laps,
+    km,
+    score: teamScore(km, Number(team.commit_count) || 0, config),
+    members: members.rows.map((m) => ({
+      name: m.name,
+      laps: Number(m.laps),
+      active: m.id === team.active_member_id && !m.frozen_at,
+      frozen: !!m.frozen_at,
+      connected: !!m.activated_at,
+      lastPingAgoS: m.last_fix?.at ? Math.round((Date.now() - m.last_fix.at) / 1000) : null,
+    })),
+  });
+});
+
 // Public leaderboard. Poll every 2-5s.
 router.get('/:slug/board', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM events WHERE slug = $1', [req.params.slug]);

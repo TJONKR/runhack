@@ -95,6 +95,16 @@
   <p class="muted">Laps outside start–end are recorded but invalid. Commits count from start.
     Dev tip: for a walkable test event set min lap ~10 and max lap ~1200.</p>
 
+  <h2>Race</h2>
+  <div class="team-row">
+    <span id="raceStatus" class="muted" style="flex:1">—</span>
+    <button onclick="control('start_now')">▶ Start now</button>
+    <button id="pauseBtn" onclick="control('pause')">⏸ Pause</button>
+    <button onclick="control('end_now')">■ End now</button>
+  </div>
+  <button onclick="resetRace()" style="border-color:#DD6A24;color:#DD6A24">⚠ Reset race data</button>
+  <span class="muted">wipes laps + runners, keeps event/teams/repos</span>
+
   <h2>Zones <span style="color:rgba(244,243,239,0.4)">(lap order · zone 0 = start/finish)</span></h2>
   <div id="drawing-banner">Click map corners, then Finish zone.</div>
   <div id="zoneList"></div>
@@ -108,6 +118,10 @@
   <div id="teamList"></div>
   <input type="text" id="teamName" placeholder="team name">
   <button onclick="addTeam()">Add team</button>
+
+  <h2>Runners <span style="color:rgba(244,243,239,0.4)">(live connections)</span></h2>
+  <div id="rosterList" class="muted">—</div>
+  <button onclick="loadRoster()">↻ Refresh</button>
 
   <h2>Simulator</h2>
   <p class="muted">Fake runner looping the drawn zones from this tab — registers a real member and
@@ -245,7 +259,9 @@ async function loadEvent(slug) {
   redrawZones();
   if (zones[0]?.polygon?.[0]) map.setView(zones[0].polygon[0], 17);
   renderTeams(e.teams || []);
+  renderRaceStatus(e);
   renderLinks(e.slug);
+  loadRoster();
 }
 function toLocalInput(iso) {
   if (!iso) return '';
@@ -274,13 +290,93 @@ async function saveEvent() {
 function renderTeams(teams) {
   const el = document.getElementById('teamList');
   el.innerHTML = teams.map((t) =>
-    `<div class="team-row"><span style="flex:1">${t.name} <span class="muted">(${t.member_count} joins · ${t.commit_count ?? 0} commits)</span></span>
+    `<div class="team-row"><span style="flex:1"><b>${t.name}</b> <span class="muted">(${t.member_count} joins · ${t.commit_count ?? 0} commits)</span></span>
+     <a href="/${evSlug.value.trim()}/team/${t.id}" target="_blank"><button title="team page + QR">QR</button></a>
+     <button onclick="addLap(${t.id})" title="manually credit a lap">+lap</button>
+     <button onclick="toggleLaps(${t.id})" title="review laps">laps</button>
      <button onclick="delTeam(${t.id})">✕</button></div>
      <div class="team-row"><input type="text" placeholder="github repo url" value="${t.repo_url || ''}"
-       onchange="setRepo(${t.id}, this.value)" style="flex:1;font-size:12px"></div>`).join('') ||
+       onchange="setRepo(${t.id}, this.value)" style="flex:1;font-size:12px"></div>
+     <div id="laps-${t.id}" style="display:none;margin:4px 0 10px;padding-left:8px;border-left:2px solid var(--line)"></div>`).join('') ||
     '<div class="muted">none yet</div>';
   const sim = document.getElementById('simTeam');
   sim.innerHTML = teams.map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
+}
+
+// ---- Race lifecycle + lap management ----
+async function control(action) {
+  const slug = evSlug.value.trim();
+  if (action === 'end_now' && !confirm('End the race now?')) return;
+  const r = await fetch(`/api/admin/events/${slug}/control`, {
+    method: 'POST', headers: H(), body: JSON.stringify({ action }),
+  });
+  if (r.ok) loadEvent(slug);
+}
+async function resetRace() {
+  const slug = evSlug.value.trim();
+  if (!confirm(`Wipe ALL laps and runners for "${slug}"? Teams and config survive.`)) return;
+  await fetch(`/api/admin/events/${slug}/reset`, { method: 'POST', headers: H() });
+  loadEvent(slug);
+}
+function renderRaceStatus(e) {
+  const now = Date.now();
+  const start = e.start_at ? new Date(e.start_at).getTime() : null;
+  const end = e.end_at ? new Date(e.end_at).getTime() : null;
+  let s = 'live';
+  if (start && now < start) s = 'upcoming';
+  else if (end && now > end) s = 'finished';
+  else if (e.paused_at) s = 'paused';
+  document.getElementById('raceStatus').innerHTML =
+    `status: <b style="color:${{ live: '#4ade80', paused: '#F0BE2A', upcoming: '#3A90E6', finished: '#DD6A24' }[s]}">${s}</b>`;
+  const pb = document.getElementById('pauseBtn');
+  pb.textContent = e.paused_at ? '▶ Resume' : '⏸ Pause';
+  pb.onclick = () => control(e.paused_at ? 'resume' : 'pause');
+}
+async function addLap(teamId) {
+  const seconds = prompt('Lap time in seconds (for the board’s last-lap display):', '120');
+  if (seconds === null) return;
+  await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${teamId}/laps`, {
+    method: 'POST', headers: H(), body: JSON.stringify({ seconds: +seconds }),
+  });
+  loadEvent(evSlug.value.trim());
+}
+async function toggleLaps(teamId) {
+  const panel = document.getElementById(`laps-${teamId}`);
+  if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  const laps = await (await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${teamId}/laps`, { headers: H() })).json();
+  panel.innerHTML = laps.map((l) =>
+    `<div class="team-row" style="font-size:12px">
+       <span style="flex:1">${new Date(l.finished_at).toLocaleTimeString()} · ${Math.round(l.seconds)}s
+         · ${l.runner || 'manual'}${l.manual ? ' (manual)' : ''}
+         <span style="color:${l.counted ? '#4ade80' : '#DD6A24'}">${l.counted ? '✓ valid' : '✕ ' + (l.reject_reason || 'invalid')}</span></span>
+       <button onclick="flipLap(${l.id}, ${!l.counted}, ${teamId})">${l.counted ? 'invalidate' : 'make valid'}</button>
+     </div>`).join('') || '<span class="muted">no laps yet</span>';
+}
+async function flipLap(lapId, counted, teamId) {
+  await fetch(`/api/admin/laps/${lapId}`, { method: 'PATCH', headers: H(), body: JSON.stringify({ counted }) });
+  const panel = document.getElementById(`laps-${teamId}`);
+  panel.style.display = 'none';
+  toggleLaps(teamId);
+}
+async function loadRoster() {
+  const slug = evSlug.value.trim();
+  if (!slug) return;
+  const roster = await (await fetch(`/api/admin/events/${slug}/members`, { headers: H() })).json();
+  document.getElementById('rosterList').innerHTML = roster.map((m) => {
+    const ping = m.lastPingAgoS == null ? 'never pinged'
+      : m.lastPingAgoS <= 15 ? `<span style="color:#4ade80">ping ${m.lastPingAgoS}s</span>`
+      : `ping ${m.lastPingAgoS}s`;
+    const state = m.frozen_at ? 'frozen' : m.is_active ? '<b style="color:#4ade80">active</b>' : m.activated_at ? 'was active' : 'joined';
+    return `<div class="team-row" style="font-size:12px">
+      <span style="flex:1">${m.team} · <b>${m.name}</b> · ${state} · ${m.lap_count} laps · ${ping}</span>
+      ${m.frozen_at ? '' : `<button onclick="freezeMember(${m.id})" title="force-stop this runner's tracking">freeze</button>`}
+    </div>`;
+  }).join('') || '<span class="muted">nobody yet</span>';
+}
+async function freezeMember(id) {
+  await fetch(`/api/admin/members/${id}/freeze`, { method: 'POST', headers: H() });
+  loadRoster();
 }
 async function setRepo(teamId, repoUrl) {
   await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${teamId}`, {

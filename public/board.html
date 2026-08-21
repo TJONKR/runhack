@@ -153,7 +153,11 @@ function renderState() {
   const el = document.getElementById('state');
   if (!board) return;
   const nothingYet = board.teams.every((t) => t.laps === 0 && !t.runner);
-  if (board.status === 'upcoming') {
+  if (board.status === 'paused') {
+    el.innerHTML = `<div class="big">RACE <span class="accent">PAUSED</span></div>
+      <div class="sub">Hold tight — laps don't count until we resume</div>`;
+    el.style.display = 'block';
+  } else if (board.status === 'upcoming') {
     el.innerHTML = `<div class="big">NOBODY <span class="accent">SITS DOWN</span></div>
       <div class="sub">Race hasn't started · scan your team QR to get set</div>`;
     el.style.display = 'block';
@@ -187,6 +191,11 @@ function renderGun() {
   const end = board.endAt ? new Date(board.endAt).getTime() : null;
 
   let target = null;
+  if (board.status === 'paused') {
+    label.textContent = '';
+    gun.innerHTML = '<div class="gun-cell gun-final"><b>PAUSED</b><span>hold</span></div>';
+    return;
+  }
   if (start && now < start) { label.textContent = 'Starting gun'; target = start; }
   else if (end && now < end) { label.textContent = 'Time left'; target = end; }
   else if (end) {

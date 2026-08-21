@@ -7,6 +7,7 @@ import adminRouter from './admin.js';
 import apiRouter from './api.js';
 import { ingestHandler } from './ingest.js';
 import { startGithubPoller } from './github.js';
+import QRCode from 'qrcode';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', 'public');
@@ -35,9 +36,20 @@ app.get('/api/brands', (req, res) => {
 
 app.use('/api', apiRouter);
 
+// QR as SVG for team pages / printouts. Only encodes URLs on this host.
+app.get('/qr.svg', async (req, res) => {
+  const text = String(req.query.text || '');
+  const origin = `${req.protocol}://${req.get('host')}`;
+  if (!text.startsWith(origin) || text.length > 500) return res.status(400).send('bad text');
+  res.type('image/svg+xml').send(
+    await QRCode.toString(text, { type: 'svg', margin: 1, color: { dark: '#08182F', light: '#F4F3EF' } })
+  );
+});
+
 app.get('/admin', (req, res) => res.sendFile(path.join(publicDir, 'admin.html')));
 app.get('/:slug/join', (req, res) => res.sendFile(path.join(publicDir, 'join.html')));
 app.get('/:slug/board', (req, res) => res.sendFile(path.join(publicDir, 'board.html')));
+app.get('/:slug/team/:teamId', (req, res) => res.sendFile(path.join(publicDir, 'team.html')));
 app.use(express.static(publicDir));
 
 app.use((err, req, res, next) => {

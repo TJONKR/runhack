@@ -39,11 +39,31 @@ the board shows the last lap's verdict with its reason.
 
 | URL | What |
 | --- | --- |
-| `/admin` | event setup (needs admin key) |
-| `/:slug/join` | runner signup — this is the printed QR |
+| `/admin` | race control (password = `ADMIN_KEY`) |
+| `/:slug/join` | runner signup |
+| `/:slug/join?team=ID` | signup with team preselected (what team QRs encode) |
+| `/:slug/team/:teamId` | per-team page: join QR, live roster, stats — print or pin at base |
 | `/:slug/board` | venue big-screen board |
 | `/api/:slug/board` | public JSON board (poll 2–5s) |
+| `/api/:slug/team/:teamId` | public team JSON |
 | `/ingest/:userId` | Traccar ingest (GET or POST) |
+
+## Race management (in `/admin`)
+
+- **Lifecycle**: start now / pause / resume / end now, plus editable start & end
+  times. Paused and out-of-window laps are recorded but invalid; the board
+  shows PAUSED / starting gun / FINAL states accordingly.
+- **Laps**: `+lap` manually credits a lap to a team; the `laps` panel lists the
+  last 50 with verdicts and lets you flip any lap valid ↔ invalid (rescue a
+  GPS-robbed lap, or strike a bogus one). Board totals recompute instantly.
+- **Runners**: live roster with connection freshness per member; `freeze`
+  force-stops a runner's tracking (lost phone, wrong device streaming).
+- **Reset race data**: wipes laps/members/points after a rehearsal; teams,
+  repos, and event config survive.
+- **Team QR pages**: every team row links to its `/team/:id` page whose QR
+  encodes the pre-filled join URL. Runner scans → enters name → Traccar deep
+  link configures the app with their per-stint `userId` (the id Traccar then
+  reports back on every GPS ping, which is how fixes map to the member).
 
 ## Events = environments
 
