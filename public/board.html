@@ -67,7 +67,7 @@
 
   footer { margin-top: 40px; padding: 16px 0 22px; border-top: 1px solid rgba(244,243,239,0.1);
            overflow: hidden; width: 100%; }
-  .brands { display: flex; gap: 56px; align-items: center; width: max-content; animation: marquee 40s linear infinite; }
+  .brands { display: flex; gap: 56px; align-items: center; width: max-content; animation: marquee 120s linear infinite; }
   .brands img { height: 20px; opacity: 0.8; }
   .brands img.partner { filter: brightness(0) invert(1); } /* white-out like the site's bar */
   .sponsor-tile { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.25em;
@@ -215,7 +215,11 @@ async function loadBrands() {
       ? partners.map((p) => anchors + img(p, 'partner')).join('')
       : (anchors + `<span class="sponsor-tile">Sponsor</span>`).repeat(4);
     while (strip.length && (strip.match(/<img/g) || []).length < 24) strip += strip; // fill width
-    document.getElementById('brands').innerHTML = strip + strip; // doubled for seamless marquee
+    const el = document.getElementById('brands');
+    el.innerHTML = strip + strip; // doubled for seamless marquee
+    // Constant speed regardless of logo count — measure once images have loaded.
+    await Promise.allSettled([...el.querySelectorAll('img')].map((i) => i.decode()));
+    el.style.animationDuration = `${(el.scrollWidth / 2) / 30}s`; // 30 px/s
   } catch {}
 }
 
