@@ -57,10 +57,19 @@
   .lap-reason { font-family: 'Geist Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
                 color: rgba(244,243,239,0.4); display: block; }
 
+  #state { text-align: center; padding: 70px 24px 30px; }
+  #state .big { font-weight: 900; font-size: 44px; letter-spacing: -1px; }
+  #state .big .accent { color: var(--gold); }
+  #state .sub { font-family: 'Geist Mono', monospace; font-size: 13px; letter-spacing: 0.15em;
+                text-transform: uppercase; color: rgba(244,243,239,0.5); margin-top: 14px; }
+  #updated { color: rgba(244,243,239,0.5); }
+  #updated.stale { color: var(--orange); }
+
   footer { margin-top: 40px; padding: 16px 0 22px; border-top: 1px solid rgba(244,243,239,0.1);
            overflow: hidden; width: 100%; }
   .brands { display: flex; gap: 56px; align-items: center; width: max-content; animation: marquee 40s linear infinite; }
   .brands img { height: 20px; opacity: 0.8; }
+  .brands img.partner { filter: brightness(0) invert(1); } /* white-out like the site's bar */
   .sponsor-tile { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.25em;
                   text-transform: uppercase; color: rgba(244,243,239,0.35); white-space: nowrap;
                   border: 1px dashed rgba(244,243,239,0.25); padding: 6px 14px; }
@@ -77,8 +86,10 @@
 </header>
 <div class="rulebar">
   <span id="scoreRule">You run. You build.</span>
+  <span id="updated"></span>
   <span>Pace rule: slower than 7'00"/km isn't running.</span>
 </div>
+<div id="state" style="display:none"></div>
 <table>
   <thead><tr>
     <th></th><th>Team</th><th>Runner</th>
@@ -93,6 +104,7 @@
 const slug = location.pathname.split('/')[1];
 let board = null;
 let clockSkewMs = 0;
+let lastFetchOkAt = null;
 
 function fmtPace(s) {
   if (s == null) return '—';
@@ -107,11 +119,13 @@ async function tick() {
     const r = await fetch(`/api/${slug}/board`);
     if (!r.ok) return;
     board = await r.json();
+    lastFetchOkAt = Date.now();
     clockSkewMs = new Date(board.serverNow).getTime() - Date.now();
     document.getElementById('eventname').textContent = board.event;
     document.getElementById('scoreRule').textContent =
       'You run. You build. Score = ' +
       (board.scoreFormula === 'km_plus_commits' ? 'km + weighted commits.' : 'km x commits.');
+    renderState();
     document.getElementById('rows').innerHTML = board.teams.map((t, i) => {
       const lap = t.lastLap;
       const lapCell = lap
@@ -131,6 +145,37 @@ async function tick() {
       </tr>`;
     }).join('');
   } catch {}
+}
+
+// Pre-race / quiet-race states. The table stays visible underneath so team
+// names are on screen before the gun.
+function renderState() {
+  const el = document.getElementById('state');
+  if (!board) return;
+  const nothingYet = board.teams.every((t) => t.laps === 0 && !t.runner);
+  if (board.status === 'upcoming') {
+    el.innerHTML = `<div class="big">NOBODY <span class="accent">SITS DOWN</span></div>
+      <div class="sub">Race hasn't started · scan your team QR to get set</div>`;
+    el.style.display = 'block';
+  } else if (board.status === 'live' && board.teams.length === 0) {
+    el.innerHTML = `<div class="big">NO TEAMS <span class="accent">YET</span></div>
+      <div class="sub">Teams appear here as they're created</div>`;
+    el.style.display = 'block';
+  } else if (board.status === 'live' && nothingYet) {
+    el.innerHTML = `<div class="big">THE RACE IS <span class="accent">LIVE</span></div>
+      <div class="sub">Waiting for the first runners · scan your team QR and go</div>`;
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function renderUpdated() {
+  const el = document.getElementById('updated');
+  if (!lastFetchOkAt) { el.textContent = 'Connecting…'; return; }
+  const ago = Math.round((Date.now() - lastFetchOkAt) / 1000);
+  el.textContent = `Updated ${ago <= 3 ? 'just now' : ago + 's ago'}`;
+  el.classList.toggle('stale', ago > 20);
 }
 
 function renderGun() {
@@ -161,20 +206,21 @@ function renderGun() {
 async function loadBrands() {
   try {
     const files = await (await fetch('/api/brands')).json();
-    // Sequence like the RUN/HACK site: the brand logos, then a sponsor
-    // placeholder tile, repeated. Extra logo files dropped into
-    // public/brands/ join the rotation automatically.
-    const unit = files.map((f) => `<img src="${f}" alt="">`).join('') +
-      `<span class="sponsor-tile">Sponsor</span>` +
-      files.map((f) => `<img src="${f}" alt="">`).join('') +
-      `<span class="sponsor-tile">Community sponsor</span>`;
-    const strip = unit.repeat(4); // fill well past full width
+    // Pattern: RUN/HACK · ROXFIT · one partner, repeat through every partner.
+    // Files 01-/02- are the anchors; everything else in public/brands/ rotates.
+    const img = (f, cls = '') => `<img src="${f}" alt=""${cls ? ` class="${cls}"` : ''}>`;
+    const anchors = files.filter((f) => /\/0[12]-/.test(f)).map((f) => img(f)).join('');
+    const partners = files.filter((f) => !/\/0[12]-/.test(f));
+    let strip = partners.length
+      ? partners.map((p) => anchors + img(p, 'partner')).join('')
+      : (anchors + `<span class="sponsor-tile">Sponsor</span>`).repeat(4);
+    while (strip.length && (strip.match(/<img/g) || []).length < 24) strip += strip; // fill width
     document.getElementById('brands').innerHTML = strip + strip; // doubled for seamless marquee
   } catch {}
 }
 
 setInterval(tick, 3000);
-setInterval(renderGun, 1000);
+setInterval(() => { renderGun(); renderUpdated(); }, 1000);
 tick(); loadBrands();
 </script>
 </body>
