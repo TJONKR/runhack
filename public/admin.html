@@ -253,9 +253,8 @@
 
     <div class="etab" id="tab-runners">
       <div class="wrap">
-        <h2>Runners <span style="color:rgba(244,243,239,0.4)">(auto-refreshes)</span></h2>
+        <h2>People</h2>
         <div id="rosterList" class="muted">—</div>
-        <h2>Add runner manually</h2>
         <div class="card">
           <div class="row">
             <select id="newRunnerTeam" style="width:auto;flex:1"></select>
@@ -263,8 +262,19 @@
                    onkeydown="if(event.key==='Enter')addRunner()">
             <button class="primary" onclick="addRunner()">Add runner</button>
           </div>
-          <span class="muted">For when the join page fails on a phone — the runner appears below;
-            use their <b>cfg</b> button to connect their Traccar.</span>
+        </div>
+
+        <h2>Devices <span style="color:rgba(244,243,239,0.4)">(auto-refreshes · one active tracker per team)</span></h2>
+        <div id="deviceList" class="muted">—</div>
+        <div class="card">
+          <div class="row">
+            <select id="newDeviceTeam" style="width:auto;flex:1"></select>
+            <input type="text" id="newDeviceName" placeholder="device label (e.g. Team phone)" style="flex:1"
+                   onkeydown="if(event.key==='Enter')addDevice()">
+            <button class="primary" onclick="addDevice()">Add device</button>
+          </div>
+          <span class="muted">Creates a tracker and its Traccar config link (<b>cfg</b> button) —
+            for phones where the join page misbehaves.</span>
         </div>
       </div>
     </div>
@@ -701,30 +711,56 @@ async function addRunner() {
   document.getElementById('newRunnerName').value = '';
   loadRoster();
 }
+async function addDevice() {
+  const teamId = +document.getElementById('newDeviceTeam').value;
+  const name = document.getElementById('newDeviceName').value.trim() || 'Team phone';
+  if (!teamId) return;
+  const r = await fetch(`/api/${cur.slug}/devices`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ teamId, name }),
+  });
+  if (!r.ok) return alert('failed: ' + (await r.text()));
+  document.getElementById('newDeviceName').value = '';
+  loadRoster();
+}
+let lastPeople = [];
 async function loadRoster() {
   if (!cur) return;
-  document.getElementById('newRunnerTeam').innerHTML =
-    (cur.teams || []).map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
-  const roster = await (await fetch(`/api/admin/events/${cur.slug}/members`, { headers: H() })).json();
-  document.getElementById('rosterList').innerHTML = roster.map((m) => {
-    const ping = m.lastPingAgoS == null ? 'never pinged'
-      : m.lastPingAgoS <= 15 ? `<span style="color:var(--ok)">ping ${m.lastPingAgoS}s</span>`
-      : `ping ${m.lastPingAgoS}s`;
-    const state = m.frozen_at ? 'frozen' : m.is_active ? '<b style="color:var(--ok)">active</b>' : m.activated_at ? 'was active' : 'joined';
-    const traccar = `org.traccar.client://config?url=${encodeURIComponent(location.origin + '/ingest/' + m.user_id)}&id=${m.user_id}&accuracy=highest&interval=2&distance=0`;
-    return `<div class="card"><div class="row" style="font-size:12px">
-      <span style="flex:1;min-width:200px">${m.team} · <b>${m.name}</b> <span class="muted">#${m.id}</span> · ${state} · ${m.lap_count} laps · ${ping}</span>
-      <button onclick="copyText('${traccar}', this)" title="copy the Traccar config link — open on the runner's phone to (re)connect">cfg</button>
+  const teamOpts = (cur.teams || []).map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
+  document.getElementById('newRunnerTeam').innerHTML = teamOpts;
+  document.getElementById('newDeviceTeam').innerHTML = teamOpts;
+
+  const [people, devices] = await Promise.all([
+    (await fetch(`/api/admin/events/${cur.slug}/members`, { headers: H() })).json(),
+    (await fetch(`/api/admin/events/${cur.slug}/devices`, { headers: H() })).json(),
+  ]);
+  lastPeople = people;
+
+  document.getElementById('rosterList').innerHTML = people.map((m) =>
+    `<div class="card"><div class="row" style="font-size:12px">
+      <span style="flex:1;min-width:200px">${m.team} · <b>${m.name}</b> <span class="muted">#${m.id}</span> · ${m.laps} laps</span>
       <button onclick="renameMember(${m.id}, '${m.name.replace(/'/g, "\\'")}')">rename</button>
-      <button onclick="moveMember(${m.id})" title="move to another team (laps go too)">move</button>
-      ${m.is_active && !m.frozen_at ? '' : `<button onclick="activateMember(${m.id})" title="make this the team's live runner">activate</button>`}
-      ${m.frozen_at
-        ? `<button onclick="unfreezeMember(${m.id})">unfreeze</button>`
-        : `<button onclick="freezeMember(${m.id})" title="force-stop tracking">freeze</button>`}
-      <button onclick="resetMemberState(${m.id})" title="clear a stuck lap state machine">reset</button>
-      <button onclick="deleteMember(${m.id}, '${m.name.replace(/'/g, "\\'")}')" title="remove a mis-join (team keeps laps)">✕</button>
+      <button onclick="moveMember(${m.id})" title="move to another team (laps + devices go too)">move</button>
+      <button onclick="deleteMember(${m.id}, '${m.name.replace(/'/g, "\\'")}')" title="remove (team keeps laps, devices become team devices)">✕</button>
+    </div></div>`).join('') || '<span class="muted">Nobody yet.</span>';
+
+  document.getElementById('deviceList').innerHTML = devices.map((d) => {
+    const ping = d.lastPingAgoS == null ? 'never pinged'
+      : d.lastPingAgoS <= 15 ? `<span style="color:var(--ok)">ping ${d.lastPingAgoS}s</span>`
+      : `ping ${d.lastPingAgoS}s`;
+    const label = d.member_name || d.name || 'Team device';
+    const state = d.is_active ? '<b style="color:var(--ok)">ACTIVE</b>' : d.activated_at ? 'standby' : 'not connected';
+    const traccar = `org.traccar.client://config?url=${encodeURIComponent(location.origin + '/ingest/' + d.token)}&id=${d.token}&accuracy=highest&interval=2&distance=0`;
+    return `<div class="card"><div class="row" style="font-size:12px">
+      <span style="flex:1;min-width:200px">${d.team} · <b>${label}</b> <span class="muted">#${d.id}</span> · ${state} · ${d.lap_count} laps · ${ping}</span>
+      <button onclick="copyText('${traccar}', this)" title="copy the Traccar config link — open on the phone to (re)connect it">cfg</button>
+      <button onclick="renameDevice(${d.id}, '${(d.name || '').replace(/'/g, "\\'")}')">rename</button>
+      <button onclick="assignDevice(${d.id}, ${d.team_id})" title="link this device to a person (credits their laps)">assign</button>
+      ${d.is_active ? '' : `<button onclick="activateDevice(${d.id})" title="make this the team's scoring tracker">activate</button>`}
+      <button onclick="deviceAction(${d.id}, '/reset-state')" title="clear a stuck lap state machine">reset</button>
+      <button onclick="deleteDevice(${d.id}, '${label.replace(/'/g, "\\'")}')">✕</button>
     </div></div>`;
-  }).join('') || '<span class="muted">Nobody yet.</span>';
+  }).join('') || '<span class="muted">No devices yet.</span>';
 }
 async function memberAction(id, action, method = 'POST', body) {
   const r = await fetch(`/api/admin/members/${id}${action}`, {
@@ -732,13 +768,6 @@ async function memberAction(id, action, method = 'POST', body) {
   });
   if (!r.ok) alert('failed: ' + (await r.text()));
   loadRoster();
-}
-const freezeMember = (id) => memberAction(id, '/freeze');
-const unfreezeMember = (id) => memberAction(id, '/unfreeze');
-const resetMemberState = (id) => memberAction(id, '/reset-state');
-function activateMember(id) {
-  if (confirm("Make this member the team's live runner? The current one gets frozen."))
-    memberAction(id, '/activate');
 }
 function renameMember(id, current) {
   const name = prompt('New runner name:', current);
@@ -751,8 +780,29 @@ function moveMember(id) {
   memberAction(id, '', 'PATCH', { teamId: +v, moveLaps: true });
 }
 function deleteMember(id, name) {
-  if (confirm(`Remove "${name}"? Their laps stay with the team, unattributed.`))
+  if (confirm(`Remove "${name}"? Their laps stay with the team; their devices become team devices.`))
     memberAction(id, '', 'DELETE');
+}
+async function deviceAction(id, action, method = 'POST', body) {
+  const r = await fetch(`/api/admin/devices/${id}${action}`, {
+    method, headers: H(), body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) alert('failed: ' + (await r.text()));
+  loadRoster();
+}
+function renameDevice(id, current) {
+  const name = prompt('Device label:', current);
+  if (name !== null) deviceAction(id, '', 'PATCH', { name });
+}
+function assignDevice(id, teamId) {
+  const list = lastPeople.filter((p) => p.team_id === teamId).map((p) => `${p.id} = ${p.name}`).join('\n');
+  const v = prompt(`Link to which person? Enter an id (blank = team device):\n${list || '(nobody on this team yet)'}`);
+  if (v === null) return;
+  deviceAction(id, '', 'PATCH', { memberId: v.trim() ? +v : null });
+}
+const activateDevice = (id) => deviceAction(id, '/activate');
+function deleteDevice(id, label) {
+  if (confirm(`Remove device "${label}"? Its laps stay with the team.`)) deviceAction(id, '', 'DELETE');
 }
 setInterval(() => {
   if (cur && curTab === 'runners' && !document.hidden) loadRoster();
@@ -811,41 +861,42 @@ function teamColour(teamId) {
   const idx = (cur.teams || []).findIndex((t) => t.id === teamId);
   return PALETTE[(idx < 0 ? 0 : idx) % PALETTE.length];
 }
-let liveMarkers = {}; // memberId -> circleMarker
+let liveMarkers = {}; // deviceId -> circleMarker
 async function refreshLive() {
   if (!cur || curTab !== 'map' || !map) return;
-  const r = await fetch(`/api/admin/events/${cur.slug}/members`, { headers: H() });
+  const r = await fetch(`/api/admin/events/${cur.slug}/devices`, { headers: H() });
   if (!r.ok) return;
-  const roster = await r.json();
-  const live = roster.filter((m) => m.is_active && !m.frozen_at && m.lat != null);
+  const devices = await r.json();
+  const live = devices.filter((d) => d.is_active && d.lat != null);
 
   const seen = new Set();
-  live.forEach((m) => {
-    seen.add(m.id);
-    const stale = m.lastPingAgoS == null || m.lastPingAgoS > 30;
-    const col = teamColour(m.team_id);
-    if (!liveMarkers[m.id]) {
-      liveMarkers[m.id] = L.circleMarker([m.lat, m.lng], { radius: 8, weight: 2 })
+  live.forEach((d) => {
+    seen.add(d.id);
+    const stale = d.lastPingAgoS == null || d.lastPingAgoS > 30;
+    const col = teamColour(d.team_id);
+    const label = d.member_name || d.name || 'Team device';
+    if (!liveMarkers[d.id]) {
+      liveMarkers[d.id] = L.circleMarker([d.lat, d.lng], { radius: 8, weight: 2 })
         .bindTooltip('', { direction: 'top' }).addTo(map);
     }
-    liveMarkers[m.id]
-      .setLatLng([m.lat, m.lng])
+    liveMarkers[d.id]
+      .setLatLng([d.lat, d.lng])
       .setStyle({ color: col, fillColor: col, fillOpacity: stale ? 0.15 : 0.85, opacity: stale ? 0.4 : 1 })
-      .setTooltipContent(`${m.name} · ${m.team} · ${m.lap_count} laps${stale ? ' · signal lost' : ''}`);
+      .setTooltipContent(`${label} · ${d.team} · ${d.lap_count} laps${stale ? ' · signal lost' : ''}`);
   });
   Object.keys(liveMarkers).forEach((id) => {
     if (!seen.has(+id)) { map.removeLayer(liveMarkers[id]); delete liveMarkers[id]; }
   });
 
-  // Mini legend: one row per team, its colour + active runner + freshness.
+  // Mini legend: one row per team, its colour + active tracker + freshness.
   const legend = document.getElementById('legend');
   const rows = (cur.teams || []).map((t) => {
-    const m = live.find((x) => x.team_id === t.id);
-    const stale = m && (m.lastPingAgoS == null || m.lastPingAgoS > 30);
-    return `<div class="lrow${m && stale ? ' lstale' : ''}">
+    const d = live.find((x) => x.team_id === t.id);
+    const stale = d && (d.lastPingAgoS == null || d.lastPingAgoS > 30);
+    return `<div class="lrow${d && stale ? ' lstale' : ''}">
       <span class="ldot" style="background:${teamColour(t.id)}"></span>
       <b>${t.name}</b>
-      <span class="muted" style="margin-left:auto">${m ? (stale ? 'signal lost' : m.name) : 'no runner'}</span>
+      <span class="muted" style="margin-left:auto">${d ? (stale ? 'signal lost' : (d.member_name || d.name || 'team device')) : 'no tracker'}</span>
     </div>`;
   }).join('');
   legend.innerHTML = `<h3>Runners</h3>${rows || '<span class="muted">no teams</span>'}`;
@@ -985,12 +1036,12 @@ async function startSim() {
   const noiseM = +document.getElementById('simNoise').value;
   const acc = +document.getElementById('simAcc').value;
 
-  const r = await fetch(`/api/${cur.slug}/members`, {
+  const r = await fetch(`/api/${cur.slug}/devices`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ teamId, name }),
   });
   if (!r.ok) return alert('register failed: ' + (await r.text()));
-  const { userId } = await r.json();
+  const { token: userId } = await r.json();
 
   const path = [...zones.map((z) => centroid(z.polygon)), centroid(zones[0].polygon)];
   const segLens = path.slice(0, -1).map((p, i) => metersBetween(p, path[i + 1]));

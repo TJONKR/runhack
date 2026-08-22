@@ -65,6 +65,21 @@ export async function initDb() {
     );
     CREATE INDEX IF NOT EXISTS points_member_time ON points (member_id, fixed_at);
 
+    CREATE TABLE IF NOT EXISTS devices (
+      id          serial PRIMARY KEY,
+      event_id    integer NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      team_id     integer NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+      member_id   integer REFERENCES members(id) ON DELETE SET NULL,
+      token       text UNIQUE NOT NULL,
+      name        text,
+      activated_at timestamptz,
+      state       jsonb NOT NULL DEFAULT '{}',
+      lap_count   integer NOT NULL DEFAULT 0,
+      last_lap_s  real,
+      last_fix    jsonb,
+      created_at  timestamptz NOT NULL DEFAULT now()
+    );
+
     ALTER TABLE events ADD COLUMN IF NOT EXISTS start_at timestamptz;
     ALTER TABLE events ADD COLUMN IF NOT EXISTS end_at timestamptz;
     ALTER TABLE events ADD COLUMN IF NOT EXISTS paused_at timestamptz;
@@ -82,7 +97,37 @@ export async function initDb() {
     ALTER TABLE laps ALTER COLUMN member_id DROP NOT NULL;
     ALTER TABLE laps ADD COLUMN IF NOT EXISTS entry_seconds real;
     ALTER TABLE laps ADD COLUMN IF NOT EXISTS gate_seconds real;
+    ALTER TABLE laps ADD COLUMN IF NOT EXISTS device_id integer;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS active_device_id integer;
+    ALTER TABLE members ALTER COLUMN user_id DROP NOT NULL;
+    ALTER TABLE points ALTER COLUMN member_id DROP NOT NULL;
+    ALTER TABLE points ADD COLUMN IF NOT EXISTS device_id integer;
   `);
+
+  // One-time migration from the old per-stint model: members that carried a
+  // Traccar token become devices linked to that person, so already-configured
+  // phones keep working.
+  const { rows } = await pool.query('SELECT count(*)::int AS n FROM devices');
+  if (rows[0].n === 0) {
+    await pool.query(`
+      INSERT INTO devices (event_id, team_id, member_id, token, name, activated_at,
+                           state, lap_count, last_lap_s, last_fix, created_at)
+      SELECT m.event_id, m.team_id, m.id, m.user_id, m.name, m.activated_at,
+             m.state, m.lap_count, m.last_lap_s, m.last_fix, m.created_at
+        FROM members m
+       WHERE m.user_id IS NOT NULL AND m.activated_at IS NOT NULL AND m.frozen_at IS NULL
+    `);
+    await pool.query(`
+      UPDATE teams t SET active_device_id = d.id
+        FROM devices d
+       WHERE d.member_id = t.active_member_id AND d.team_id = t.id
+         AND t.active_member_id IS NOT NULL
+    `);
+    await pool.query(`
+      UPDATE laps l SET device_id = d.id
+        FROM devices d WHERE d.member_id = l.member_id AND l.device_id IS NULL
+    `);
+  }
 }
 
 export function eventStatus(event, now = Date.now()) {

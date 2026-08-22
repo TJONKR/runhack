@@ -38,8 +38,7 @@ router.get('/:slug/info', async (req, res) => {
   res.json({ slug: rows[0].slug, name: rows[0].name, teams: teams.rows });
 });
 
-// Register a member (one per stint). Returns the capability userId that goes
-// into the Traccar config deep link.
+// Register a person on a team (once — devices are registered separately).
 router.post('/:slug/members', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM events WHERE slug = $1', [req.params.slug]);
   const event = rows[0];
@@ -64,28 +63,58 @@ router.post('/:slug/members', async (req, res) => {
     );
   }
 
-  const userId = crypto.randomBytes(12).toString('base64url');
-  await pool.query(
-    'INSERT INTO members (event_id, team_id, user_id, name) VALUES ($1, $2, $3, $4)',
-    [event.id, teamId, userId, name.trim()]
+  const m = await pool.query(
+    'INSERT INTO members (event_id, team_id, name) VALUES ($1, $2, $3) RETURNING id',
+    [event.id, teamId, name.trim()]
   );
-  res.json({ userId });
+  res.json({ memberId: m.rows[0].id });
+});
+
+// Register a tracking device for a team, optionally linked to a person.
+// Returns the token that becomes Traccar's device identifier — pings with it
+// map back to team (+ person) server-side.
+router.post('/:slug/devices', async (req, res) => {
+  const { rows } = await pool.query('SELECT id FROM events WHERE slug = $1', [req.params.slug]);
+  const event = rows[0];
+  if (!event) return res.status(404).json({ error: 'no such event' });
+  const { teamId, memberId = null, name = null } = req.body;
+  const team = await pool.query('SELECT id FROM teams WHERE id = $1 AND event_id = $2', [teamId, event.id]);
+  if (!team.rows[0]) return res.status(404).json({ error: 'no such team in this event' });
+  if (memberId) {
+    const m = await pool.query('SELECT id FROM members WHERE id = $1 AND team_id = $2', [memberId, teamId]);
+    if (!m.rows[0]) return res.status(404).json({ error: 'no such member on this team' });
+  }
+  const token = crypto.randomBytes(12).toString('base64url');
+  await pool.query(
+    'INSERT INTO devices (event_id, team_id, member_id, token, name) VALUES ($1, $2, $3, $4, $5)',
+    [event.id, teamId, memberId, token, name?.trim() || null]
+  );
+  res.json({ token });
 });
 
 // Join-page poll: has the first Traccar fix landed yet?
-router.get('/member/:userId/status', async (req, res) => {
+router.get('/device/:token/status', async (req, res) => {
   const { rows } = await pool.query(
-    'SELECT activated_at, frozen_at, lap_count, last_fix FROM members WHERE user_id = $1',
-    [req.params.userId]
+    `SELECT d.activated_at, d.lap_count, d.last_fix, d.id = t.active_device_id AS is_active
+       FROM devices d JOIN teams t ON t.id = d.team_id WHERE d.token = $1`,
+    [req.params.token]
   );
-  const m = rows[0];
-  if (!m) return res.status(404).json({ error: 'unknown id' });
+  const d = rows[0];
+  if (!d) return res.status(404).json({ error: 'unknown id' });
   res.json({
-    activated: !!m.activated_at,
-    frozen: !!m.frozen_at,
-    laps: m.lap_count,
-    lastFixAgoS: m.last_fix?.at ? Math.round((Date.now() - m.last_fix.at) / 1000) : null,
+    activated: !!d.activated_at,
+    active: !!d.is_active,
+    laps: d.lap_count,
+    lastFixAgoS: d.last_fix?.at ? Math.round((Date.now() - d.last_fix.at) / 1000) : null,
   });
+});
+
+// Make a device the team's scoring tracker (used at multi-phone handovers).
+router.post('/device/:token/activate', async (req, res) => {
+  const { rows } = await pool.query('SELECT id, team_id FROM devices WHERE token = $1', [req.params.token]);
+  if (!rows[0]) return res.status(404).json({ error: 'unknown id' });
+  await pool.query('UPDATE teams SET active_device_id = $1 WHERE id = $2', [rows[0].id, rows[0].team_id]);
+  res.json({ ok: true });
 });
 
 // Team detail for the per-team page: roster with live status, no secrets.
@@ -94,7 +123,7 @@ router.get('/:slug/team/:teamId', async (req, res) => {
   const event = ev.rows[0];
   if (!event) return res.status(404).json({ error: 'no such event' });
   const t = await pool.query(
-    `SELECT id, name, repo_url, repo_status, commit_count, commit_override, score_adjust, active_member_id
+    `SELECT id, name, repo_url, repo_status, commit_count, commit_override, score_adjust, active_device_id
        FROM teams WHERE id = $1 AND event_id = $2`,
     [req.params.teamId, event.id]
   );
@@ -102,12 +131,18 @@ router.get('/:slug/team/:teamId', async (req, res) => {
   if (!team) return res.status(404).json({ error: 'no such team' });
 
   const members = await pool.query(
-    `SELECT m.id, m.name, m.activated_at, m.frozen_at, m.last_fix,
-            COALESCE(l.laps, 0) AS laps
+    `SELECT m.id, m.name, COALESCE(l.laps, 0) AS laps
        FROM members m
        LEFT JOIN (SELECT member_id, count(*) AS laps FROM laps WHERE counted GROUP BY member_id) l
          ON l.member_id = m.id
-      WHERE m.team_id = $1 ORDER BY m.created_at DESC`,
+      WHERE m.team_id = $1 ORDER BY m.created_at ASC`,
+    [team.id]
+  );
+  const devices = await pool.query(
+    `SELECT d.id, d.name, d.member_id, d.activated_at, d.last_fix, d.lap_count, d.token,
+            m.name AS member_name
+       FROM devices d LEFT JOIN members m ON m.id = d.member_id
+      WHERE d.team_id = $1 ORDER BY d.created_at ASC`,
     [team.id]
   );
   const lapAgg = await pool.query(
@@ -132,21 +167,26 @@ router.get('/:slug/team/:teamId', async (req, res) => {
     readiness: {
       minMembers: config.minTeamSize,
       members: members.rows.length,
-      devicesConnected: members.rows.filter((m) => m.activated_at).length,
+      devicesConnected: devices.rows.filter((d) => d.activated_at).length,
       githubConnected: team.repo_status === 'connected',
       repoSet: !!team.repo_url,
       ready:
         members.rows.length >= config.minTeamSize &&
-        members.rows.some((m) => m.activated_at) &&
+        devices.rows.some((d) => d.activated_at) &&
         team.repo_status === 'connected',
     },
     members: members.rows.map((m) => ({
+      id: m.id,
       name: m.name,
       laps: Number(m.laps),
-      active: m.id === team.active_member_id && !m.frozen_at,
-      frozen: !!m.frozen_at,
-      connected: !!m.activated_at,
-      lastPingAgoS: m.last_fix?.at ? Math.round((Date.now() - m.last_fix.at) / 1000) : null,
+    })),
+    devices: devices.rows.map((d) => ({
+      token: d.token, // capability: whoever can see the team page can manage its devices
+      label: d.member_name || d.name || 'Team device',
+      active: d.id === team.active_device_id,
+      connected: !!d.activated_at,
+      laps: d.lap_count,
+      lastPingAgoS: d.last_fix?.at ? Math.round((Date.now() - d.last_fix.at) / 1000) : null,
     })),
   });
 });
@@ -161,11 +201,13 @@ router.get('/:slug/board', async (req, res) => {
   const teams = await pool.query(
     `SELECT t.id, t.name, t.repo_url, t.commit_count, t.commit_override, t.score_adjust,
             t.last_commit_msg, t.last_commit_author, t.last_commit_at, t.committers,
-            am.name AS runner_name, am.last_fix AS runner_last_fix,
+            COALESCE(dm.name, ad.name, CASE WHEN ad.id IS NULL THEN NULL ELSE 'Team device' END) AS runner_name,
+            ad.last_fix AS runner_last_fix,
             ll.seconds AS last_lap_s, ll.counted AS last_lap_valid, ll.reject_reason AS last_lap_reason,
             COALESCE(l.valid, 0) AS valid_laps, COALESCE(l.invalid, 0) AS invalid_laps
        FROM teams t
-       LEFT JOIN members am ON am.id = t.active_member_id
+       LEFT JOIN devices ad ON ad.id = t.active_device_id
+       LEFT JOIN members dm ON dm.id = ad.member_id
        LEFT JOIN (
          SELECT team_id,
                 count(*) FILTER (WHERE counted) AS valid,

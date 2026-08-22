@@ -123,7 +123,7 @@ function fmtAgo(s) {
   return `${Math.round(s / 3600)}h ago`;
 }
 
-const REASONS = { too_fast: 'GPS bounce', too_slow: 'too slow', outside_window: 'outside race' };
+const REASONS = { too_fast: 'GPS bounce', too_slow: 'too slow', outside_window: 'outside race', too_soon: 'double count' };
 
 async function tick() {
   try {

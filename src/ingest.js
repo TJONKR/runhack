@@ -62,48 +62,47 @@ export async function ingestHandler(req, res) {
   if (!fix) return res.status(400).send('no coordinates');
 
   const { rows } = await pool.query(
-    `SELECT m.*, e.zones, e.config AS event_config, e.start_at, e.end_at, e.paused_at
-       FROM members m JOIN events e ON e.id = m.event_id
-      WHERE m.user_id = $1`,
+    `SELECT d.*, t.active_device_id, e.zones, e.config AS event_config, e.start_at, e.end_at, e.paused_at
+       FROM devices d
+       JOIN teams t ON t.id = d.team_id
+       JOIN events e ON e.id = d.event_id
+      WHERE d.token = $1`,
     [userId]
   );
-  const member = rows[0];
-  if (!member) return res.status(404).send('unknown id');
+  const device = rows[0];
+  if (!device) return res.status(404).send('unknown id');
 
-  // Frozen ids (previous stints) are dropped quietly — 200 so Traccar
-  // doesn't queue and retry forever.
-  if (member.frozen_at) return res.status(200).send('frozen');
+  if (!device.activated_at) {
+    await pool.query('UPDATE devices SET activated_at = now() WHERE id = $1', [device.id]);
+  }
 
-  // First-ever ingest activates this member and freezes the team's previous
-  // active runner. Each stint is a fresh registration, so this fires once.
-  if (!member.activated_at) {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const t = await client.query(
-        'SELECT active_member_id FROM teams WHERE id = $1 FOR UPDATE',
-        [member.team_id]
-      );
-      const prev = t.rows[0]?.active_member_id;
-      if (prev && prev !== member.id) {
-        await client.query('UPDATE members SET frozen_at = now() WHERE id = $1', [prev]);
-      }
-      await client.query('UPDATE teams SET active_member_id = $1 WHERE id = $2', [
-        member.id,
-        member.team_id,
+  // One scoring device per team. The first device to ping becomes active;
+  // a non-active device takes over only if the active one has gone silent
+  // (dead battery / closed app) — otherwise its pings are recorded for ops
+  // visibility but don't drive the lap engine.
+  const fixJson = { lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM, speedMs: fix.speedMs, at: fix.timestampMs };
+  if (device.active_device_id !== device.id) {
+    let takeOver = device.active_device_id == null;
+    if (!takeOver) {
+      const { rows: act } = await pool.query('SELECT last_fix FROM devices WHERE id = $1', [
+        device.active_device_id,
       ]);
-      await client.query('UPDATE members SET activated_at = now() WHERE id = $1', [member.id]);
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
+      const lastAt = act[0]?.last_fix?.at;
+      takeOver = lastAt == null || Date.now() - lastAt > 90_000;
+    }
+    if (takeOver) {
+      await pool.query(
+        'UPDATE teams SET active_device_id = $1 WHERE id = $2 AND (active_device_id IS NULL OR active_device_id = $3 OR $4)',
+        [device.id, device.team_id, device.active_device_id, device.active_device_id == null]
+      );
+    } else {
+      await pool.query('UPDATE devices SET last_fix = $1 WHERE id = $2', [fixJson, device.id]);
+      return res.status(200).send('standby');
     }
   }
 
-  const config = eventConfig({ zones: member.zones, config: member.event_config });
-  const state = member.state && member.state.nextZone !== undefined ? member.state : createState();
+  const config = eventConfig({ zones: device.zones, config: device.event_config });
+  const state = device.state && device.state.nextZone !== undefined ? device.state : createState();
   const { state: newState, events } = processFix(state, fix, config);
 
   // Official timing selection: 'entry_entry' swaps the scored seconds to the
@@ -124,15 +123,15 @@ export async function ingestHandler(req, res) {
 
   // Laps finished outside the event window are recorded but invalid — useful
   // for pre-start warmups and system checks without polluting the board.
-  const startMs = member.start_at ? new Date(member.start_at).getTime() : null;
-  const endMs = member.end_at ? new Date(member.end_at).getTime() : null;
+  const startMs = device.start_at ? new Date(device.start_at).getTime() : null;
+  const endMs = device.end_at ? new Date(device.end_at).getTime() : null;
   for (const ev of events) {
     if (ev.type === 'lap' && ev.counted) {
       if ((startMs && fix.timestampMs < startMs) || (endMs && fix.timestampMs > endMs)) {
         ev.counted = false;
         ev.reason = 'outside_window';
         newState.lapCount -= 1;
-      } else if (member.paused_at) {
+      } else if (device.paused_at) {
         ev.counted = false;
         ev.reason = 'paused';
         newState.lapCount -= 1;
@@ -140,14 +139,32 @@ export async function ingestHandler(req, res) {
     }
   }
 
+  // Cross-device guard: even around a switchover, a team can't record two
+  // counted laps closer together than a physically possible lap time.
+  for (const ev of events) {
+    if (ev.type === 'lap' && ev.counted) {
+      const { rows: recentLap } = await pool.query(
+        `SELECT 1 FROM laps WHERE team_id = $1 AND counted
+          AND finished_at > now() - make_interval(secs => $2) LIMIT 1`,
+        [device.team_id, config.minLapS]
+      );
+      if (recentLap[0]) {
+        ev.counted = false;
+        ev.reason = 'too_soon';
+        newState.lapCount -= 1;
+      }
+    }
+  }
+
   // Laps first, gate attachments second: a gate crossing can arrive in the
-  // same batch as (or just after) the lap it refines.
+  // same batch as (or just after) the lap it refines. Laps are attributed to
+  // the person the device is linked to, if any.
   for (const ev of events) {
     if (ev.type === 'lap') {
       await pool.query(
-        `INSERT INTO laps (event_id, team_id, member_id, seconds, counted, reject_reason, entry_seconds)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [member.event_id, member.team_id, member.id, ev.seconds, ev.counted, ev.reason, ev.entrySeconds]
+        `INSERT INTO laps (event_id, team_id, member_id, device_id, seconds, counted, reject_reason, entry_seconds)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [device.event_id, device.team_id, device.member_id, device.id, ev.seconds, ev.counted, ev.reason, ev.entrySeconds]
       );
     }
   }
@@ -155,9 +172,9 @@ export async function ingestHandler(req, res) {
     if (ev.type === 'gate_lap') {
       const { rows: recent } = await pool.query(
         `SELECT id, counted, reject_reason, manual FROM laps
-          WHERE member_id = $1 AND finished_at > now() - interval '45 seconds'
+          WHERE device_id = $1 AND finished_at > now() - interval '45 seconds'
           ORDER BY finished_at DESC LIMIT 1`,
-        [member.id]
+        [device.id]
       );
       const lap = recent[0];
       if (!lap) continue;
@@ -180,19 +197,13 @@ export async function ingestHandler(req, res) {
   }
 
   await pool.query(
-    `UPDATE members SET state = $1, lap_count = $2, last_lap_s = $3, last_fix = $4 WHERE id = $5`,
-    [
-      newState,
-      newState.lapCount,
-      newState.lastLapS,
-      { lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM, speedMs: fix.speedMs, at: fix.timestampMs },
-      member.id,
-    ]
+    `UPDATE devices SET state = $1, lap_count = $2, last_lap_s = $3, last_fix = $4 WHERE id = $5`,
+    [newState, newState.lapCount, newState.lastLapS, fixJson, device.id]
   );
   await pool.query(
-    `INSERT INTO points (member_id, lat, lng, accuracy_m, speed_ms, fixed_at)
-     VALUES ($1, $2, $3, $4, $5, to_timestamp($6 / 1000.0))`,
-    [member.id, fix.lat, fix.lng, fix.accuracyM, fix.speedMs, fix.timestampMs]
+    `INSERT INTO points (member_id, device_id, lat, lng, accuracy_m, speed_ms, fixed_at)
+     VALUES ($1, $2, $3, $4, $5, $6, to_timestamp($7 / 1000.0))`,
+    [device.member_id, device.id, fix.lat, fix.lng, fix.accuracyM, fix.speedMs, fix.timestampMs]
   );
 
   res.status(200).send('ok');

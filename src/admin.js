@@ -36,7 +36,7 @@ router.get('/events/:slug', async (req, res) => {
   const teams = await pool.query(
     `SELECT t.*,
             (SELECT count(*) FROM members m WHERE m.team_id = t.id) AS member_count,
-            (SELECT count(*) FROM members m WHERE m.team_id = t.id AND m.activated_at IS NOT NULL) AS connected_count
+            (SELECT count(*) FROM devices d WHERE d.team_id = t.id AND d.activated_at IS NOT NULL) AS connected_count
        FROM teams t WHERE t.event_id = $1 ORDER BY t.name`,
     [rows[0].id]
   );
@@ -89,7 +89,9 @@ router.post('/events/:slug/teams/:teamId/laps', async (req, res) => {
   const ev = await pool.query('SELECT id FROM events WHERE slug = $1', [req.params.slug]);
   if (!ev.rows[0]) return res.status(404).json({ error: 'no such event' });
   const team = await pool.query(
-    'SELECT id, active_member_id FROM teams WHERE id = $1 AND event_id = $2',
+    `SELECT t.id, d.member_id AS active_member_id, d.id AS active_device_id
+       FROM teams t LEFT JOIN devices d ON d.id = t.active_device_id
+      WHERE t.id = $1 AND t.event_id = $2`,
     [req.params.teamId, ev.rows[0].id]
   );
   if (!team.rows[0]) return res.status(404).json({ error: 'no such team' });
@@ -98,9 +100,9 @@ router.post('/events/:slug/teams/:teamId/laps', async (req, res) => {
   const inserted = [];
   for (let i = 0; i < count; i++) {
     const { rows } = await pool.query(
-      `INSERT INTO laps (event_id, team_id, member_id, seconds, counted, manual)
-       VALUES ($1, $2, $3, $4, true, true) RETURNING id`,
-      [ev.rows[0].id, team.rows[0].id, team.rows[0].active_member_id, seconds]
+      `INSERT INTO laps (event_id, team_id, member_id, device_id, seconds, counted, manual)
+       VALUES ($1, $2, $3, $4, $5, true, true) RETURNING id`,
+      [ev.rows[0].id, team.rows[0].id, team.rows[0].active_member_id, team.rows[0].active_device_id, seconds]
     );
     inserted.push(rows[0].id);
   }
@@ -130,31 +132,72 @@ router.patch('/laps/:lapId', async (req, res) => {
   res.json(rows[0]);
 });
 
-// Ops roster: every member with connection freshness, for on-the-day debugging.
+// People roster: names + attributed laps.
 router.get('/events/:slug/members', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT m.id, m.name, m.user_id, m.team_id, m.activated_at, m.frozen_at, m.lap_count, m.last_fix,
-            t.name AS team, t.active_member_id = m.id AS is_active
+    `SELECT m.id, m.name, m.team_id, t.name AS team,
+            COALESCE(l.laps, 0) AS laps
        FROM members m JOIN teams t ON t.id = m.team_id
+       LEFT JOIN (SELECT member_id, count(*) AS laps FROM laps WHERE counted GROUP BY member_id) l
+         ON l.member_id = m.id
       WHERE m.event_id = (SELECT id FROM events WHERE slug = $1)
-      ORDER BY t.name, m.created_at DESC`,
+      ORDER BY t.name, m.created_at ASC`,
     [req.params.slug]
   );
-  res.json(rows.map((m) => ({
-    ...m,
-    lastPingAgoS: m.last_fix?.at ? Math.round((Date.now() - m.last_fix.at) / 1000) : null,
-    lat: m.last_fix?.lat ?? null,
-    lng: m.last_fix?.lng ?? null,
+  res.json(rows);
+});
+
+// Devices roster: connection freshness + positions, for ops and the map.
+router.get('/events/:slug/devices', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT d.id, d.token, d.name, d.member_id, d.team_id, d.activated_at, d.lap_count, d.last_fix,
+            t.name AS team, m.name AS member_name, d.id = t.active_device_id AS is_active
+       FROM devices d JOIN teams t ON t.id = d.team_id
+       LEFT JOIN members m ON m.id = d.member_id
+      WHERE d.event_id = (SELECT id FROM events WHERE slug = $1)
+      ORDER BY t.name, d.created_at ASC`,
+    [req.params.slug]
+  );
+  res.json(rows.map((d) => ({
+    ...d,
+    lastPingAgoS: d.last_fix?.at ? Math.round((Date.now() - d.last_fix.at) / 1000) : null,
+    lat: d.last_fix?.lat ?? null,
+    lng: d.last_fix?.lng ?? null,
     last_fix: undefined,
   })));
 });
 
-// Force-stop a runner's tracking (lost phone, wrong person streaming, etc).
-router.post('/members/:memberId/freeze', async (req, res) => {
-  await pool.query('UPDATE members SET frozen_at = now() WHERE id = $1', [req.params.memberId]);
-  await pool.query('UPDATE teams SET active_member_id = NULL WHERE active_member_id = $1', [
-    req.params.memberId,
-  ]);
+// Device management: relabel, relink to a person, make it the scoring
+// tracker, clear a stuck lap state, or remove it.
+router.patch('/devices/:deviceId', async (req, res) => {
+  const d = await pool.query('SELECT * FROM devices WHERE id = $1', [req.params.deviceId]);
+  if (!d.rows[0]) return res.status(404).json({ error: 'no such device' });
+  if ('name' in req.body) {
+    await pool.query('UPDATE devices SET name = $1 WHERE id = $2', [req.body.name?.trim() || null, d.rows[0].id]);
+  }
+  if ('memberId' in req.body) {
+    const mid = req.body.memberId || null;
+    if (mid) {
+      const m = await pool.query('SELECT id FROM members WHERE id = $1 AND team_id = $2', [mid, d.rows[0].team_id]);
+      if (!m.rows[0]) return res.status(404).json({ error: 'no such member on this team' });
+    }
+    await pool.query('UPDATE devices SET member_id = $1 WHERE id = $2', [mid, d.rows[0].id]);
+  }
+  res.json({ ok: true });
+});
+router.post('/devices/:deviceId/activate', async (req, res) => {
+  const d = await pool.query('SELECT id, team_id FROM devices WHERE id = $1', [req.params.deviceId]);
+  if (!d.rows[0]) return res.status(404).json({ error: 'no such device' });
+  await pool.query('UPDATE teams SET active_device_id = $1 WHERE id = $2', [d.rows[0].id, d.rows[0].team_id]);
+  res.json({ ok: true });
+});
+router.post('/devices/:deviceId/reset-state', async (req, res) => {
+  await pool.query("UPDATE devices SET state = '{}' WHERE id = $1", [req.params.deviceId]);
+  res.json({ ok: true });
+});
+router.delete('/devices/:deviceId', async (req, res) => {
+  await pool.query('UPDATE teams SET active_device_id = NULL WHERE active_device_id = $1', [req.params.deviceId]);
+  await pool.query('DELETE FROM devices WHERE id = $1', [req.params.deviceId]);
   res.json({ ok: true });
 });
 
@@ -164,9 +207,10 @@ router.post('/events/:slug/reset', async (req, res) => {
   const ev = await pool.query('SELECT id FROM events WHERE slug = $1', [req.params.slug]);
   if (!ev.rows[0]) return res.status(404).json({ error: 'no such event' });
   const id = ev.rows[0].id;
-  await pool.query('DELETE FROM points WHERE member_id IN (SELECT id FROM members WHERE event_id = $1)', [id]);
+  await pool.query('DELETE FROM points WHERE device_id IN (SELECT id FROM devices WHERE event_id = $1)', [id]);
   await pool.query('DELETE FROM laps WHERE event_id = $1', [id]);
-  await pool.query('UPDATE teams SET active_member_id = NULL WHERE event_id = $1', [id]);
+  await pool.query('UPDATE teams SET active_device_id = NULL WHERE event_id = $1', [id]);
+  await pool.query('DELETE FROM devices WHERE event_id = $1', [id]);
   await pool.query('DELETE FROM members WHERE event_id = $1', [id]);
   res.json({ ok: true });
 });
@@ -243,8 +287,10 @@ router.patch('/members/:memberId', async (req, res) => {
       req.body.teamId, member.event_id,
     ]);
     if (!t.rows[0]) return res.status(404).json({ error: 'no such team in this event' });
-    await pool.query('UPDATE teams SET active_member_id = NULL WHERE active_member_id = $1', [member.id]);
     await pool.query('UPDATE members SET team_id = $1 WHERE id = $2', [t.rows[0].id, member.id]);
+    // devices linked to them follow, unless they were a team's scoring device
+    await pool.query('UPDATE teams SET active_device_id = NULL WHERE active_device_id IN (SELECT id FROM devices WHERE member_id = $1)', [member.id]);
+    await pool.query('UPDATE devices SET team_id = $1 WHERE member_id = $2', [t.rows[0].id, member.id]);
     if (req.body.moveLaps) {
       await pool.query('UPDATE laps SET team_id = $1 WHERE member_id = $2', [t.rows[0].id, member.id]);
     }
@@ -252,43 +298,11 @@ router.patch('/members/:memberId', async (req, res) => {
   res.json({ ok: true });
 });
 
-// Undo a freeze (or a handoff that shouldn't have happened).
-router.post('/members/:memberId/unfreeze', async (req, res) => {
-  await pool.query('UPDATE members SET frozen_at = NULL WHERE id = $1', [req.params.memberId]);
-  res.json({ ok: true });
-});
-
-// Force this member to be the team's active runner (phone died mid-stint and
-// the previous runner is resuming, marshal picks who's live).
-router.post('/members/:memberId/activate', async (req, res) => {
-  const m = await pool.query('SELECT id, team_id FROM members WHERE id = $1', [req.params.memberId]);
-  if (!m.rows[0]) return res.status(404).json({ error: 'no such member' });
-  const { id, team_id } = m.rows[0];
-  await pool.query(
-    `UPDATE members SET frozen_at = now() WHERE id = (SELECT active_member_id FROM teams WHERE id = $1) AND id <> $2`,
-    [team_id, id]
-  );
-  await pool.query(
-    "UPDATE members SET frozen_at = NULL, activated_at = COALESCE(activated_at, now()) WHERE id = $1",
-    [id]
-  );
-  await pool.query('UPDATE teams SET active_member_id = $1 WHERE id = $2', [id, team_id]);
-  res.json({ ok: true });
-});
-
-// Clear a member's lap state machine (stuck in a weird phase). Laps survive.
-router.post('/members/:memberId/reset-state', async (req, res) => {
-  await pool.query("UPDATE members SET state = '{}' WHERE id = $1", [req.params.memberId]);
-  res.json({ ok: true });
-});
-
 // Remove a member (mis-join, duplicate). Their laps stay with the team,
-// unattributed, so the score doesn't silently change.
+// unattributed; their devices become team devices.
 router.delete('/members/:memberId', async (req, res) => {
   await pool.query('UPDATE laps SET member_id = NULL WHERE member_id = $1', [req.params.memberId]);
-  await pool.query('UPDATE teams SET active_member_id = NULL WHERE active_member_id = $1', [req.params.memberId]);
-  await pool.query('DELETE FROM points WHERE member_id = $1', [req.params.memberId]);
-  await pool.query('DELETE FROM members WHERE id = $1', [req.params.memberId]);
+  await pool.query('DELETE FROM members WHERE id = $1', [req.params.memberId]); // devices: member_id -> NULL via FK
   res.json({ ok: true });
 });
 
@@ -297,9 +311,9 @@ router.delete('/events/:slug', async (req, res) => {
   const ev = await pool.query('SELECT id FROM events WHERE slug = $1', [req.params.slug]);
   if (!ev.rows[0]) return res.status(404).json({ error: 'no such event' });
   const id = ev.rows[0].id;
-  await pool.query('DELETE FROM points WHERE member_id IN (SELECT id FROM members WHERE event_id = $1)', [id]);
+  await pool.query('DELETE FROM points WHERE device_id IN (SELECT id FROM devices WHERE event_id = $1)', [id]);
   await pool.query('DELETE FROM laps WHERE event_id = $1', [id]);
-  await pool.query('DELETE FROM events WHERE id = $1', [id]); // teams/members cascade
+  await pool.query('DELETE FROM events WHERE id = $1', [id]); // teams/members/devices cascade
   res.json({ ok: true });
 });
 

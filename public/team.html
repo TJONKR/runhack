@@ -84,6 +84,8 @@
     </div>
     <div class="mono" style="margin-bottom:6px">Runners</div>
     <div id="members"></div>
+    <div class="mono" style="margin:22px 0 6px">Tracking devices</div>
+    <div id="devices"></div>
   </div>
 </main>
 <script>
@@ -121,16 +123,30 @@ async function tick() {
     }
     laps.textContent = t.laps; km.textContent = t.km.toFixed(1);
     commits.textContent = t.commits; score.textContent = t.score;
-    document.getElementById('members').innerHTML = t.members.map((m) => {
-      const stale = m.lastPingAgoS == null || m.lastPingAgoS > 60;
-      const cls = m.active && !stale ? 'active' : m.frozen ? 'frozen' : 'idle';
-      const tag = m.active ? (stale ? 'signal lost' : 'on track') : m.frozen ? 'done' : m.connected ? 'connected' : 'not connected';
-      const ping = m.active && !stale ? ` · ping ${m.lastPingAgoS}s` : '';
-      return `<div class="member"><span class="dot ${cls}"></span>
+    document.getElementById('members').innerHTML = t.members.map((m) =>
+      `<div class="member"><span class="dot idle"></span>
         <span class="name">${esc(m.name)}</span>
-        <span class="tag">${m.laps} ${m.laps === 1 ? 'lap' : 'laps'} · ${tag}${ping}</span></div>`;
-    }).join('') || '<div class="tag">Nobody yet — scan the QR</div>';
+        <span class="tag">${m.laps} ${m.laps === 1 ? 'lap' : 'laps'}</span></div>`
+    ).join('') || '<div class="tag">Nobody yet — scan the QR</div>';
+
+    document.getElementById('devices').innerHTML = (t.devices || []).map((d) => {
+      const stale = d.lastPingAgoS == null || d.lastPingAgoS > 60;
+      const cls = d.active && !stale ? 'active' : 'frozen';
+      const tag = d.active ? (stale ? 'active · signal lost' : `tracking · ping ${d.lastPingAgoS}s`)
+        : d.connected ? (stale ? 'standby · quiet' : 'standby') : 'never pinged';
+      const btn = d.active ? '' :
+        `<button onclick="makeActive('${d.token}')" style="font-family:'Geist Mono',monospace;font-size:9px;
+           letter-spacing:0.12em;text-transform:uppercase;background:transparent;color:var(--gold);
+           border:1px solid rgba(240,190,42,0.5);border-radius:4px;padding:5px 10px;cursor:pointer">Make active</button>`;
+      return `<div class="member"><span class="dot ${cls}"></span>
+        <span class="name" style="font-weight:400">${esc(d.label)}</span>
+        <span class="tag">${d.laps} laps · ${tag}</span>${btn}</div>`;
+    }).join('') || '<div class="tag">No devices yet — set one up from the join page</div>';
   } catch {}
+}
+async function makeActive(token) {
+  await fetch(`/api/device/${token}/activate`, { method: 'POST' });
+  tick();
 }
 setInterval(tick, 3000);
 tick();

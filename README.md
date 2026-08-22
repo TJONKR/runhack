@@ -11,15 +11,25 @@ so event-week deploys carry zero risk to the app.
 
 ## How tracking works
 
-1. Runner scans their **team QR** → `/{event}/join?team=N` → enters their name.
-2. Server mints an unguessable per-stint `userId` and deep-links into
-   [Traccar Client](https://www.traccar.org/client/) (free, App Store + Play)
-   with the ingest URL and that `userId` as the device identifier.
-3. Traccar streams GPS to `POST /ingest/{userId}` (OsmAnd protocol — query,
-   form, or JSON all accepted). The first fix activates the runner and
-   freezes the team's previous one — **handoff = the next runner scans the
-   QR again**, same phone or not.
-4. All lap logic runs server-side: geofence zone sequence, dwell rules,
+People and devices are separate things:
+
+1. Each runner scans the **team QR** → `/{event}/join?team=N` → registers
+   **once** (a member).
+2. Any phone that will track gets registered as a **device** — linked to a
+   person (credits their laps) or to the team (shared phone). The server
+   mints an unguessable token and deep-links into
+   [Traccar Client](https://www.traccar.org/client/) (free, App Store +
+   Play) with the ingest URL and that token as Traccar's device identifier.
+3. Traccar streams GPS to `POST /ingest/{token}` (OsmAnd protocol — query,
+   form, or JSON). Every ping self-identifies: token → team (+ person).
+4. **One scoring device per team.** The first device to ping becomes the
+   team's tracker; other devices ping in standby. Handoff on a shared phone
+   needs no action at all — just pass it. Multi-phone handoff = tap "Make
+   active" on the team page (or admin); if the active device goes silent for
+   90s, a standby device auto-takes-over. A team can never record two laps
+   closer together than a possible lap time, so switchovers can't
+   double-count.
+5. All lap logic runs server-side: geofence zone sequence, dwell rules,
    accuracy gating, pace window, leaderboard, GitHub commit polling.
 
 ## Lap detection & timing

@@ -66,9 +66,19 @@
       <label>Team GitHub repo (public — commits count toward your score)</label>
       <input id="repo" placeholder="https://github.com/you/project" autocomplete="off" inputmode="url">
     </div>
-    <button onclick="register()">I'm running next →</button>
-    <p class="muted">Each runner registers again at every handover — a new registration takes over
-      the team's tracking and freezes the previous runner.</p>
+    <button onclick="register()">Join the team →</button>
+    <button class="secondary" onclick="openDeviceStep()">Already joined? Set up tracking on this phone</button>
+    <p class="muted">Register once. Tracking is per phone — set it up next, and pass the phone (or
+      switch devices) at handovers.</p>
+  </div>
+
+  <div class="step" id="step-device">
+    <div class="status">Set up tracking on this phone</div>
+    <label>Who is this phone tracking?</label>
+    <select id="deviceOwner"></select>
+    <button onclick="connectDevice()">Connect Traccar →</button>
+    <p class="muted">One phone can serve the whole team — laps count for the team either way;
+      picking a runner just credits them on the roster.</p>
   </div>
 
   <div class="step" id="step-traccar">
@@ -90,7 +100,7 @@
   </div>
 
   <div class="step" id="step-live">
-    <div class="status"><div class="ok">✓</div>You're live. Background Traccar, open your agent app, and run.</div>
+    <div class="status"><div class="ok">✓</div><span id="liveTitle">You're live. Background Traccar, open your agent app, and run.</span></div>
     <div class="status" id="liveStats" style="font-size:14px;font-weight:400;color:rgba(244,243,239,0.6)"></div>
   </div>
 </main>
@@ -99,7 +109,11 @@
 
 <script>
 const slug = location.pathname.split('/')[1];
-let userId = null;
+let token = null;          // this phone's device token
+let newMemberId = null;    // person just registered on this phone
+
+const teamId = () => +document.getElementById('team').value;
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 async function init() {
   const r = await fetch(`/api/${slug}/info`);
@@ -122,41 +136,68 @@ async function init() {
   updateRepoField();
 }
 
+// Step 1: register a person (once).
 async function register() {
   const name = document.getElementById('name').value.trim();
-  const teamId = +document.getElementById('team').value;
   if (!name) return alert('Enter your name');
   const repoUrl = document.getElementById('repo').value.trim() || undefined;
   const r = await fetch(`/api/${slug}/members`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ teamId, name, repoUrl }),
+    body: JSON.stringify({ teamId: teamId(), name, repoUrl }),
   });
   if (!r.ok) return alert('Registration failed: ' + (await r.text()));
-  userId = (await r.json()).userId;
+  newMemberId = (await r.json()).memberId;
+  openDeviceStep();
+}
+
+// Step 2: register this phone as a tracking device (team-level or per-person).
+async function openDeviceStep() {
+  const r = await fetch(`/api/${slug}/team/${teamId()}`);
+  const t = r.ok ? await r.json() : { members: [] };
+  const sel = document.getElementById('deviceOwner');
+  sel.innerHTML = `<option value="">Team phone (shared)</option>` +
+    (t.members || []).map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  if (newMemberId) sel.value = String(newMemberId);
+  show('step-device');
+}
+
+async function connectDevice() {
+  const memberId = +document.getElementById('deviceOwner').value || null;
+  const label = document.getElementById('deviceOwner').selectedOptions[0]?.textContent;
+  const r = await fetch(`/api/${slug}/devices`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ teamId: teamId(), memberId, name: label }),
+  });
+  if (!r.ok) return alert('Device setup failed: ' + (await r.text()));
+  token = (await r.json()).token;
   show('step-traccar');
   document.getElementById('manualUrl').textContent = ingestUrl();
-  document.getElementById('manualId').textContent = userId;
+  document.getElementById('manualId').textContent = token;
   poll();
 }
 
-function ingestUrl() { return `${location.origin}/ingest/${userId}`; }
+function ingestUrl() { return `${location.origin}/ingest/${token}`; }
 
 function openTraccar() {
   const cfg = `org.traccar.client://config?url=${encodeURIComponent(ingestUrl())}` +
-    `&id=${userId}&accuracy=highest&interval=2&distance=0`;
+    `&id=${token}&accuracy=highest&interval=2&distance=0`;
   location.href = cfg;
 }
 function showManual() { document.getElementById('manual').style.display = 'block'; }
 
 async function poll() {
-  const r = await fetch(`/api/member/${userId}/status`);
+  const r = await fetch(`/api/device/${token}/status`);
   if (r.ok) {
     const s = await r.json();
     if (s.activated) {
       show('step-live');
+      document.getElementById('liveTitle').textContent = s.active
+        ? "You're live. Background Traccar, open your agent app, and run."
+        : 'Connected — on standby. This phone takes over if the active one goes quiet.';
       document.getElementById('liveStats').textContent =
-        `Laps this stint: ${s.laps}` + (s.lastFixAgoS != null ? ` · last ping ${s.lastFixAgoS}s ago` : '');
+        `Laps on this device: ${s.laps}` + (s.lastFixAgoS != null ? ` · last ping ${s.lastFixAgoS}s ago` : '');
     }
   }
   setTimeout(poll, 2000);
