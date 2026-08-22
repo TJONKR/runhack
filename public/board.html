@@ -51,6 +51,9 @@
   th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   td { padding: 13px 16px; border-top: 1px solid rgba(244,243,239,0.08); }
   td.rank { color: rgba(244,243,239,0.35); width: 44px; font-family: 'Geist Mono', monospace; }
+  .move { display: block; font-size: 10px; line-height: 1; margin-top: 2px; }
+  .move.up { color: #4ade80; }
+  .move.down { color: var(--orange); }
   tr.first td.rank, tr.first td.score { color: var(--gold); }
   td.team { font-weight: 700; }
   td.score { font-weight: 900; color: var(--sky); font-size: 24px; }
@@ -172,6 +175,8 @@ async function tick() {
       (board.scoreFormula === 'km_plus_commits' ? 'km + weighted commits.' : 'km x commits.');
     renderState();
     document.getElementById('rows').innerHTML = board.teams.map((t, i) => {
+      const move = t.move
+        ? `<span class="move ${t.move}">${t.move === 'up' ? '▲' : '▼'}</span>` : '';
       const lap = t.lastLap;
       const lapCell = lap
         ? `<span class="${lap.valid ? 'lap-valid' : 'lap-invalid'}">${lap.seconds}s ${lap.valid ? '✓' : '✕'}</span>` +
@@ -186,7 +191,7 @@ async function tick() {
         ? `<span class="commitline" title="${esc(t.lastCommit.author || '')}">↑ ${esc(t.lastCommit.message)} · ${fmtAgo(t.lastCommit.agoS)}</span>`
         : '';
       return `<tr class="${i === 0 ? 'first' : ''} rowlink" onclick="location.href='/${slug}/team/${t.teamId}'">
-        <td class="rank">${String(i + 1).padStart(2, '0')}</td>
+        <td class="rank">${String(i + 1).padStart(2, '0')}${move}</td>
         <td class="team">${esc(t.team)}${commit}</td>
         <td><span class="dot ${t.status}"></span><span class="runner">${t.runner ? esc(t.runner) : '—'}</span></td>
         <td class="num">${t.laps}</td>

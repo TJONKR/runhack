@@ -233,7 +233,8 @@ router.get('/:slug/board', async (req, res) => {
             ad.last_fix AS runner_last_fix,
             ll.seconds AS last_lap_s, ll.counted AS last_lap_valid, ll.reject_reason AS last_lap_reason,
             l.avg_s AS avg_lap_s,
-            COALESCE(l.valid, 0) AS valid_laps, COALESCE(l.invalid, 0) AS invalid_laps
+            COALESCE(l.valid, 0) AS valid_laps, COALESCE(l.invalid, 0) AS invalid_laps,
+            COALESCE(l.valid_then, 0) AS valid_laps_then
        FROM teams t
        LEFT JOIN devices ad ON ad.id = t.active_device_id
        LEFT JOIN members dm ON dm.id = ad.member_id
@@ -241,7 +242,8 @@ router.get('/:slug/board', async (req, res) => {
          SELECT team_id,
                 count(*) FILTER (WHERE counted) AS valid,
                 count(*) FILTER (WHERE NOT counted) AS invalid,
-                avg(seconds) FILTER (WHERE counted) AS avg_s
+                avg(seconds) FILTER (WHERE counted) AS avg_s,
+                count(*) FILTER (WHERE counted AND finished_at < now() - interval '10 minutes') AS valid_then
            FROM laps WHERE event_id = $1 GROUP BY team_id
        ) l ON l.team_id = t.id
        LEFT JOIN LATERAL (
@@ -257,6 +259,8 @@ router.get('/:slug/board', async (req, res) => {
     .map((t) => {
       const laps = Number(t.valid_laps);
       const km = +((laps * config.lapM) / 1000).toFixed(2);
+      const lapsThen = Number(t.valid_laps_then);
+      const kmThen = +((lapsThen * config.lapM) / 1000).toFixed(2);
       const commits = t.commit_override ?? (Number(t.commit_count) || 0);
       const lastFixAgoS = t.runner_last_fix?.at
         ? Math.round((Date.now() - t.runner_last_fix.at) / 1000)
@@ -284,6 +288,8 @@ router.get('/:slug/board', async (req, res) => {
             }
           : null,
         score: +(teamScore(km, commits, config) + Number(t.score_adjust || 0)).toFixed(2),
+        scoreThen: +(teamScore(kmThen, commits, config) + Number(t.score_adjust || 0)).toFixed(2),
+        kmThen,
         lastLap: t.last_lap_s != null
           ? {
               seconds: Math.round(t.last_lap_s),
@@ -306,6 +312,18 @@ router.get('/:slug/board', async (req, res) => {
       };
     })
     .sort((a, b) => b.score - a.score || b.km - a.km || a.team.localeCompare(b.team));
+
+  // Rank movement vs 10 minutes ago, derived from the laps log (stateless:
+  // survives reloads and is identical on every screen). Commits use current
+  // values for both rankings, so movement reflects running.
+  const then = [...board].sort((a, b) => b.scoreThen - a.scoreThen || b.kmThen - a.kmThen || a.team.localeCompare(b.team));
+  const rankThen = new Map(then.map((t, i) => [t.teamId, i]));
+  board.forEach((t, i) => {
+    const was = rankThen.get(t.teamId);
+    t.move = was > i ? 'up' : was < i ? 'down' : null;
+    delete t.scoreThen;
+    delete t.kmThen;
+  });
 
   res.json({
     event: event.name,
