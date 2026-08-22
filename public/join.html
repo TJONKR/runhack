@@ -5,34 +5,57 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>Join RUN/HACK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
-  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; background: #0f1115; color: #eee;
-         display: flex; justify-content: center; min-height: 100vh; }
-  main { width: 100%; max-width: 420px; padding: 24px; }
-  h1 { font-size: 22px; }
-  label { display: block; margin: 16px 0 4px; color: #aaa; font-size: 14px; }
-  input, select { width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #333;
-                  background: #1a1d23; color: #eee; }
-  button { width: 100%; padding: 14px; font-size: 17px; font-weight: 700; border: 0; border-radius: 10px;
-           background: #e63946; color: #fff; margin-top: 20px; cursor: pointer; }
-  button.secondary { background: #2a2e37; font-weight: 400; font-size: 14px; padding: 10px; }
+  :root { --paper: #F4F3EF; --navy: #08182F; --navy2: #0C2140; --blue: #1311D1;
+          --orange: #DD6A24; --gold: #F0BE2A; --sky: #3A90E6; --ok: #4ade80;
+          --line: rgba(244,243,239,0.15); }
+  * { box-sizing: border-box; }
+  body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy);
+         color: var(--paper); min-height: 100vh; display: flex; flex-direction: column; }
+  header { background: var(--blue); border-bottom: 3px solid var(--gold); padding: 14px 24px; }
+  .wordmark { font-weight: 900; font-size: 24px; letter-spacing: -1px; line-height: 1; }
+  .wordmark .slash { color: var(--orange); }
+  .powered { display: flex; align-items: center; gap: 6px; margin-top: 4px;
+             font-family: 'Geist Mono', monospace; font-size: 7px; letter-spacing: 0.28em;
+             text-transform: uppercase; color: rgba(244,243,239,0.55); }
+  .powered img { height: 11px; display: block; }
+  main { width: 100%; max-width: 430px; margin: 0 auto; padding: 28px 24px; flex: 1; }
+  h1 { font-weight: 900; font-size: 30px; letter-spacing: -1px; margin: 0 0 20px; }
+  label { display: block; margin: 16px 0 5px; font-family: 'Geist Mono', monospace; font-size: 10px;
+          letter-spacing: 0.2em; text-transform: uppercase; color: rgba(244,243,239,0.55); }
+  input, select { width: 100%; padding: 13px; font-size: 16px; border-radius: 6px;
+                  border: 1px solid var(--line); background: var(--navy2); color: var(--paper);
+                  font-family: inherit; }
+  input:focus, select:focus { outline: 2px solid var(--sky); border-color: transparent; }
+  button { width: 100%; padding: 15px; font-size: 16px; font-weight: 700; border: 0;
+           border-radius: 8px; background: var(--gold); color: var(--navy); margin-top: 22px;
+           cursor: pointer; font-family: inherit; }
+  button:hover { background: #ffd34d; }
+  button.secondary { background: transparent; border: 1px solid var(--line); color: rgba(244,243,239,0.7);
+                     font-weight: 400; font-size: 13px; padding: 10px; }
   .step { display: none; }
   .step.active { display: block; }
-  .status { text-align: center; padding: 30px 0; font-size: 18px; }
-  .ok { color: #4ade80; font-size: 40px; }
-  .spin { display: inline-block; width: 22px; height: 22px; border: 3px solid #333; border-top-color: #e63946;
-          border-radius: 50%; animation: s 0.8s linear infinite; vertical-align: middle; margin-right: 8px; }
+  .status { text-align: center; padding: 28px 0 8px; font-size: 17px; font-weight: 700; }
+  .ok { color: var(--ok); font-size: 44px; }
+  .spin { display: inline-block; width: 20px; height: 20px; border: 3px solid var(--line);
+          border-top-color: var(--gold); border-radius: 50%; animation: s 0.8s linear infinite;
+          vertical-align: middle; margin-right: 10px; }
   @keyframes s { to { transform: rotate(360deg); } }
-  .muted { color: #888; font-size: 13px; margin-top: 16px; }
-  a { color: #7dd3fc; }
+  .muted { color: rgba(244,243,239,0.5); font-size: 13px; margin-top: 16px; line-height: 1.5; }
+  .muted code { font-family: 'Geist Mono', monospace; font-size: 11px; word-break: break-all;
+                color: rgba(244,243,239,0.75); }
+  a { color: var(--sky); }
 </style>
 </head>
 <body>
+<header>
+  <div class="wordmark">RUN<span class="slash">/</span>HACK</div>
+  <div class="powered">Powered by <img src="/brands/02-roxfit.png" alt="ROXFIT"></div>
+</header>
 <main>
-  <h1 id="eventName" style="margin-bottom:4px">RUN/HACK</h1>
-  <div style="display:flex;align-items:center;gap:6px;font-family:ui-monospace,monospace;font-size:8px;
-              letter-spacing:0.28em;text-transform:uppercase;color:#888;margin-bottom:14px">
-    Powered by <img src="/brands/02-roxfit.png" alt="ROXFIT" style="height:12px;display:block"></div>
+  <h1 id="eventName">RUN/HACK</h1>
 
   <div class="step active" id="step-register">
     <label>Team</label>
@@ -49,7 +72,7 @@
   </div>
 
   <div class="step" id="step-traccar">
-    <div class="status">Now connect the Traccar app:</div>
+    <div class="status">Now connect the Traccar app</div>
     <button onclick="openTraccar()">Open Traccar with our settings</button>
     <button class="secondary" onclick="showManual()">Nothing happened?</button>
     <div id="manual" style="display:none">
@@ -62,14 +85,17 @@
          Device identifier: <code id="manualId"></code><br>
          Accuracy: highest · Interval: 2s · Distance: 0</p>
     </div>
-    <div class="status" id="waiting"><span class="spin"></span>Waiting for your first GPS ping…</div>
+    <div class="status" style="font-weight:400;font-size:15px" id="waiting">
+      <span class="spin"></span>Waiting for your first GPS ping…</div>
   </div>
 
   <div class="step" id="step-live">
     <div class="status"><div class="ok">✓</div>You're live. Background Traccar, open your agent app, and run.</div>
-    <div class="status" id="liveStats" style="font-size:15px;color:#aaa"></div>
+    <div class="status" id="liveStats" style="font-size:14px;font-weight:400;color:rgba(244,243,239,0.6)"></div>
   </div>
 </main>
+<footer id="sponsor-bar"></footer>
+<script src="/sponsor-bar.js"></script>
 
 <script>
 const slug = location.pathname.split('/')[1];
@@ -77,7 +103,7 @@ let userId = null;
 
 async function init() {
   const r = await fetch(`/api/${slug}/info`);
-  if (!r.ok) { document.body.innerHTML = '<main><h1>Unknown event</h1></main>'; return; }
+  if (!r.ok) { document.getElementById('eventName').textContent = 'Unknown event'; document.getElementById('step-register').style.display = 'none'; return; }
   const info = await r.json();
   document.getElementById('eventName').textContent = info.name;
   const params = new URLSearchParams(location.search);
