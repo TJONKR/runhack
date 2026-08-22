@@ -62,8 +62,11 @@ on the board), and distinct committers (token only). Score formulas
 an optional `commitCap`. Manual per-team commit override and score adjust
 exist for disputes.
 
-Set `GITHUB_TOKEN` (any free personal token, no scopes needed) for 60s
-polling; without it the API's 60 req/hr limit forces 5-minute polls.
+Polling runs every 5 minutes (teams don't commit faster than that, and it
+keeps 30 repos at ~720 req/hr vs the token's 5,000 limit). Set
+`GITHUB_TOKEN` (any free personal token, no scopes needed) — without it
+GitHub's 60 req/hr IP limit breaks at even a handful of teams. The admin
+"test" button on a team's repo refreshes it instantly.
 
 ## URLs
 

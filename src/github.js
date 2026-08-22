@@ -118,8 +118,12 @@ export async function pollOnce() {
 }
 
 export function startGithubPoller() {
-  const intervalMs = process.env.GITHUB_TOKEN ? 60_000 : 300_000;
+  // 5-minute cadence: teams commit every 10-30 min at best, so fresher data
+  // buys nothing, and 30 repos x 2 calls x 12 polls/hr = 720/hr leaves 86%
+  // headroom on the 5000/hr token limit (the admin "test" button gives an
+  // instant refresh when someone needs one).
+  const intervalMs = 300_000;
   pollOnce().catch((e) => console.error('github poll', e.message));
   setInterval(() => pollOnce().catch((e) => console.error('github poll', e.message)), intervalMs);
-  console.log(`github poller every ${intervalMs / 1000}s (${process.env.GITHUB_TOKEN ? 'token' : 'no token, add GITHUB_TOKEN for 60s polling'})`);
+  console.log(`github poller every ${intervalMs / 1000}s (${process.env.GITHUB_TOKEN ? 'token' : 'NO TOKEN — 60 req/hr cap, set GITHUB_TOKEN'})`);
 }
