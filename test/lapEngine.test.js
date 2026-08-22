@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, processFix, pointInPolygon } from '../src/lapEngine.js';
+import { createState, processFix, pointInPolygon, segmentIntersection } from '../src/lapEngine.js';
 
 // Two rectangles roughly like the community track: start box and back-straight box.
 const startZone = {
@@ -163,6 +163,57 @@ test('standing at the start line (handoff) does not poison the first lap', () =>
   assert.equal(lap.counted, true);
   assert.equal(Math.round(lap.seconds), 98);
   assert.equal(state.lapCount, 1);
+});
+
+test('segment intersection interpolates the crossing point', () => {
+  // crossing at 25% along a1->a2
+  const p = segmentIntersection([0, 0], [4, 0], [1, -1], [1, 1]);
+  assert.equal(p, 0.25);
+  assert.equal(segmentIntersection([0, 0], [4, 0], [5, -1], [5, 1]), null);
+});
+
+test('gate laps: interpolated timing, jitter resets, sequence required', () => {
+  // Gate: a north-south line through the middle of the start box.
+  const gateLng = -0.0175;
+  const cfg = {
+    ...config,
+    gate: [[51.5391, gateLng], [51.5385, gateLng]],
+  };
+  const t = (lat, lng, dt) => ({ lat, lng, timestampMs: dt * 1000, accuracyM: 10 });
+  const E = -0.0170, W = -0.0180; // east/west of the gate, inside the box band
+  let state = createState();
+  const all = [];
+  const feed = (fixes) => fixes.forEach((f) => {
+    const r = processFix(state, f, cfg);
+    state = r.state;
+    all.push(...r.events);
+  });
+
+  feed([
+    t(51.5388, W, 0),    // west of gate, in box
+    t(51.5388, E, 2),    // crosses gate at t=1 -> clock set, not eligible (no sequence yet)
+    t(51.5388, -0.0160, 20), t(51.5388, -0.0160, 22), // out on course
+    t(51.5388, -0.0145, 50),  // back straight -> sequence complete -> gate eligible
+    t(51.5388, -0.0160, 70), t(51.5388, -0.0160, 72),
+    t(51.5388, E, 100),   // re-enter box, east of gate
+    t(51.5388, W, 102),   // crosses gate at t=101 -> gate lap = 101 - 1 = 100s
+  ]);
+  const gateLaps = all.filter((e) => e.type === 'gate_lap');
+  assert.equal(gateLaps.length, 1);
+  assert.equal(Math.round(gateLaps[0].seconds), 100);
+
+  // Jitter back and forth across the line without a sequence: no gate laps,
+  // clock keeps re-basing.
+  feed([t(51.5388, E, 110), t(51.5388, W, 112), t(51.5388, E, 114)]);
+  assert.equal(all.filter((e) => e.type === 'gate_lap').length, 1);
+});
+
+test('lap event carries entry-to-entry comparison seconds', () => {
+  const fixes = [...lapFixes(0, 100), ...lapFixes(100_000, 110).slice(1)];
+  const { events } = run(fixes);
+  const laps = events.filter((e) => e.type === 'lap');
+  // first lap has no prior entry clock reference lap; second lap: entry@100s -> entry@210s
+  assert.equal(Math.round(laps[1].entrySeconds), 110);
 });
 
 test('three-zone course requires all checkpoints in order', () => {

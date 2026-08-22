@@ -76,6 +76,8 @@ export async function initDb() {
     ALTER TABLE teams ADD COLUMN IF NOT EXISTS repo_status text;
     ALTER TABLE laps ADD COLUMN IF NOT EXISTS manual boolean NOT NULL DEFAULT false;
     ALTER TABLE laps ALTER COLUMN member_id DROP NOT NULL;
+    ALTER TABLE laps ADD COLUMN IF NOT EXISTS entry_seconds real;
+    ALTER TABLE laps ADD COLUMN IF NOT EXISTS gate_seconds real;
   `);
 }
 
@@ -116,6 +118,7 @@ export function eventConfig(event) {
     scoreFormula: c.scoreFormula ?? 'km_x_commits',
     commitWeight: c.commitWeight ?? 0.1,
     minTeamSize: c.minTeamSize ?? 3, // event rule: teams of 3/4
+    gate: c.gate ?? null, // [[lat,lng],[lat,lng]] timing line inside the start box
     zones: event.zones || [],
   };
 }

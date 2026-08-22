@@ -10,6 +10,18 @@
 // (lap length - start-box crossing): calibrate minLapS/maxLapS to that
 // distance, e.g. ~350m of a 400m track at the 7:00/km ceiling ≈ 147s.
 // Out-of-window laps re-arm but do not score.
+//
+// Two ALTERNATIVE timings ride along on every lap for on-track comparison
+// (they never affect credit):
+// - entrySeconds: zone-0 entry to zone-0 entry (true full lap, but standing
+//   in the box counts against it)
+// - gate crossings: if config.gate = [[lat,lng],[lat,lng]] is set (a line
+//   across the track inside the start box), each fix-to-fix segment is
+//   tested for crossing and the moment is interpolated between the two fix
+//   timestamps — sub-fix-interval precision over the true full lap. A gate
+//   lap is only emitted when the zone sequence completed since the previous
+//   crossing; every crossing (jitter included) resets the gate clock, which
+//   makes standing on the line harmless.
 
 export function createState() {
   return {
@@ -22,7 +34,24 @@ export function createState() {
     exitStreak: 0,
     lapCount: 0,
     lastLapS: null,
+    entryClockAt: null,  // ms epoch of last zone-0 ENTRY (entry-to-entry comparison)
+    prevFix: null,       // {lat, lng, t} of the previous accepted fix (gate detection)
+    gateClockAt: null,   // ms epoch of last gate crossing
+    gateEligible: false, // zone sequence completed since the last crossing
   };
+}
+
+// Do segments a1->a2 and b1->b2 intersect? Returns the parameter along a1->a2
+// (0..1) or null. Planar approximation — fine at track scale.
+export function segmentIntersection(a1, a2, b1, b2) {
+  const d1 = [a2[0] - a1[0], a2[1] - a1[1]];
+  const d2 = [b2[0] - b1[0], b2[1] - b1[1]];
+  const denom = d1[0] * d2[1] - d1[1] * d2[0];
+  if (denom === 0) return null; // parallel
+  const dx = [b1[0] - a1[0], b1[1] - a1[1]];
+  const t = (dx[0] * d2[1] - dx[1] * d2[0]) / denom;
+  const u = (dx[0] * d1[1] - dx[1] * d1[0]) / denom;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : null;
 }
 
 // Ray-casting point-in-polygon. polygon: [[lat, lng], ...]
@@ -61,6 +90,24 @@ export function processFix(state, fix, config) {
   if (fix.accuracyM != null && fix.accuracyM > (config.maxAccuracyM ?? 40)) {
     return { state: s, events: [{ type: 'dropped', reason: 'accuracy' }] };
   }
+
+  // Gate crossing (comparison timing) — checked on the raw track between
+  // consecutive accepted fixes, independent of zone dwell.
+  if (config.gate && s.prevFix) {
+    const p = segmentIntersection(
+      [s.prevFix.lat, s.prevFix.lng], [fix.lat, fix.lng],
+      config.gate[0], config.gate[1]
+    );
+    if (p !== null) {
+      const crossedAt = s.prevFix.t + p * (fix.timestampMs - s.prevFix.t);
+      if (s.gateEligible && s.gateClockAt != null) {
+        events.push({ type: 'gate_lap', seconds: (crossedAt - s.gateClockAt) / 1000 });
+        s.gateEligible = false;
+      }
+      s.gateClockAt = crossedAt; // every crossing (jitter included) resets the clock
+    }
+  }
+  s.prevFix = { lat: fix.lat, lng: fix.lng, t: fix.timestampMs };
 
   const zone = zoneAt(fix.lat, fix.lng, config.zones);
 
@@ -121,15 +168,19 @@ export function processFix(state, fix, config) {
           seconds,
           counted,
           reason: counted ? null : seconds < config.minLapS ? 'too_fast' : 'too_slow',
+          // comparison timing: true full lap, entry to entry
+          entrySeconds: s.entryClockAt != null ? (fix.timestampMs - s.entryClockAt) / 1000 : null,
         });
       }
       // Any zone-0 entry (re-)arms the next lap, including a wrong-way or
       // aborted one. The lap clock starts on the way OUT of the box.
       s.armed = true;
       s.lapStartedAt = null;
+      s.entryClockAt = fix.timestampMs;
       s.nextZone = config.zones.length > 1 ? 1 : 0;
     } else if (s.armed && entered === s.nextZone) {
       s.nextZone = (entered + 1) % config.zones.length;
+      if (s.nextZone === 0) s.gateEligible = true; // sequence complete: next gate crossing may score
     }
     // Out-of-order checkpoint entries are ignored: the sequence stays strict.
   }

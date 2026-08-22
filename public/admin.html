@@ -266,7 +266,17 @@
           <button onclick="startZone()">+ Draw zone</button>
           <button id="finishZoneBtn" class="primary" onclick="finishZone()" style="display:none">Finish zone</button>
         </div>
-        <button class="primary" onclick="saveZones()" style="margin-top:10px">Save zones</button>
+
+        <h2>Timing gate <span style="color:rgba(244,243,239,0.4)">(optional)</span></h2>
+        <p class="muted">A line across the track inside the start box. Records precise full-lap
+          times alongside the box timing so the two can be compared at the track — doesn't
+          affect scoring.</p>
+        <div class="row">
+          <button onclick="startGate()" id="gateBtn">◇ Set gate (2 clicks)</button>
+          <button onclick="clearGate()" id="gateClear">✕ clear</button>
+        </div>
+
+        <button class="primary" onclick="saveZones()" style="margin-top:10px">Save zones + gate</button>
         <span id="zoneMsg" class="muted"></span>
 
         <h2>Simulator</h2>
@@ -630,6 +640,7 @@ async function toggleLaps(teamId) {
   panel.innerHTML = laps.map((l) =>
     `<div class="row" style="font-size:12px">
        <span style="flex:1">${new Date(l.finished_at).toLocaleTimeString()} · ${Math.round(l.seconds)}s
+         ${l.entry_seconds != null ? `<span class="muted" title="entry-to-entry / gate comparison timings">(e2e ${Math.round(l.entry_seconds)}s${l.gate_seconds != null ? ` · gate ${l.gate_seconds.toFixed(1)}s` : ''})</span>` : ''}
          · ${l.runner || 'manual'}${l.manual ? ' (manual)' : ''}
          <span style="color:${l.counted ? 'var(--ok)' : 'var(--orange)'}">${l.counted ? '✓ valid' : '✕ ' + (l.reject_reason || 'invalid')}</span></span>
        <button onclick="editLapSeconds(${l.id}, ${Math.round(l.seconds)}, ${teamId})">edit s</button>
@@ -729,6 +740,11 @@ function ensureMap() {
     maxZoom: 20, attribution: '&copy; OpenStreetMap',
   }).addTo(map);
   map.on('click', (e) => {
+    if (gateDrawing) {
+      gateDrawing.push([e.latlng.lat, e.latlng.lng]);
+      if (gateDrawing.length === 2) { gate = gateDrawing; gateDrawing = null; redrawGate(); }
+      return;
+    }
     if (!drawing) return;
     drawing.points.push([e.latlng.lat, e.latlng.lng]);
     drawing.markers.push(L.circleMarker(e.latlng, { radius: 4 }).addTo(map));
@@ -736,9 +752,24 @@ function ensureMap() {
     drawing.line = L.polyline(drawing.points, { dashArray: '4' }).addTo(map);
   });
 }
+/* ---------- timing gate ---------- */
+let gate = null, gateLayer = null, gateDrawing = null;
+function redrawGate() {
+  if (gateLayer) { map.removeLayer(gateLayer); gateLayer = null; }
+  if (gate) {
+    gateLayer = L.polyline(gate, { color: '#F0BE2A', weight: 4, dashArray: '8 6' })
+      .bindTooltip('timing gate', { permanent: true, direction: 'top' }).addTo(map);
+  }
+  document.getElementById('gateBtn').textContent = gate ? '◇ Redraw gate (2 clicks)' : '◇ Set gate (2 clicks)';
+}
+function startGate() { gateDrawing = []; document.getElementById('gateBtn').textContent = 'click 2 points…'; }
+function clearGate() { gate = null; gateDrawing = null; redrawGate(); }
+
 function openMap() {
   ensureMap();
   setTimeout(() => map.invalidateSize(), 50);
+  gate = cur.config?.gate ?? null;
+  redrawGate();
   redrawZones();
   if (zones[0]?.polygon?.[0]) map.setView(zones[0].polygon[0], 17);
   document.getElementById('simTeam').innerHTML =
@@ -897,7 +928,8 @@ function finishZone() {
 async function saveZones() {
   const body = {
     slug: cur.slug, name: cur.name, zones,
-    startAt: cur.start_at, endAt: cur.end_at, config: cur.config || {},
+    startAt: cur.start_at, endAt: cur.end_at,
+    config: { ...(cur.config || {}), gate },
   };
   const r = await fetch('/api/admin/events', { method: 'POST', headers: H(), body: JSON.stringify(body) });
   document.getElementById('zoneMsg').textContent = r.ok ? 'saved ✓' : 'failed: ' + (await r.text());

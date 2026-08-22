@@ -124,12 +124,25 @@ export async function ingestHandler(req, res) {
     }
   }
 
+  // Laps first, gate attachments second: a gate crossing can arrive in the
+  // same batch as (or just after) the lap it refines.
   for (const ev of events) {
     if (ev.type === 'lap') {
       await pool.query(
-        `INSERT INTO laps (event_id, team_id, member_id, seconds, counted, reject_reason)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [member.event_id, member.team_id, member.id, ev.seconds, ev.counted, ev.reason]
+        `INSERT INTO laps (event_id, team_id, member_id, seconds, counted, reject_reason, entry_seconds)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [member.event_id, member.team_id, member.id, ev.seconds, ev.counted, ev.reason, ev.entrySeconds]
+      );
+    }
+  }
+  for (const ev of events) {
+    if (ev.type === 'gate_lap') {
+      await pool.query(
+        `UPDATE laps SET gate_seconds = $1
+          WHERE id = (SELECT id FROM laps WHERE member_id = $2
+                       AND finished_at > now() - interval '45 seconds'
+                      ORDER BY finished_at DESC LIMIT 1)`,
+        [ev.seconds, member.id]
       );
     }
   }

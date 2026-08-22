@@ -74,7 +74,8 @@ router.post('/events/:slug/control', async (req, res) => {
 // Recent laps for a team — for the valid/invalid review panel.
 router.get('/events/:slug/teams/:teamId/laps', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT l.id, l.seconds, l.counted, l.reject_reason, l.manual, l.finished_at, m.name AS runner
+    `SELECT l.id, l.seconds, l.counted, l.reject_reason, l.manual, l.finished_at,
+            l.entry_seconds, l.gate_seconds, m.name AS runner
        FROM laps l LEFT JOIN members m ON m.id = l.member_id
       WHERE l.team_id = $1 AND l.event_id = (SELECT id FROM events WHERE slug = $2)
       ORDER BY l.finished_at DESC LIMIT 50`,
