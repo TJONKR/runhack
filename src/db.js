@@ -74,6 +74,10 @@ export async function initDb() {
     ALTER TABLE teams ADD COLUMN IF NOT EXISTS commit_override integer;
     ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_adjust real NOT NULL DEFAULT 0;
     ALTER TABLE teams ADD COLUMN IF NOT EXISTS repo_status text;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS last_commit_at timestamptz;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS last_commit_msg text;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS last_commit_author text;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS committers integer;
     ALTER TABLE laps ADD COLUMN IF NOT EXISTS manual boolean NOT NULL DEFAULT false;
     ALTER TABLE laps ALTER COLUMN member_id DROP NOT NULL;
     ALTER TABLE laps ADD COLUMN IF NOT EXISTS entry_seconds real;
@@ -91,13 +95,20 @@ export function eventStatus(event, now = Date.now()) {
 }
 
 // Rank score. Formula lives in event config so it can change without code:
-//   scoreFormula: 'km_x_commits' (default, the event's "built x ran")
-//              or 'km_plus_commits' with commitWeight (score = km + commits * weight)
+//   scoreFormula: 'km_x_commits'      (default, the event's "built x ran")
+//                 'km_x_sqrt_commits' (diminishing returns on commit spam)
+//                 'km_plus_commits'   (score = km + commits * commitWeight)
+// commitCap (optional) caps how many commits can score at all.
 export function teamScore(km, commits, config) {
-  if ((config.scoreFormula ?? 'km_x_commits') === 'km_plus_commits') {
-    return +(km + commits * (config.commitWeight ?? 0.1)).toFixed(2);
+  const c = config.commitCap ? Math.min(commits, config.commitCap) : commits;
+  switch (config.scoreFormula ?? 'km_x_commits') {
+    case 'km_plus_commits':
+      return +(km + c * (config.commitWeight ?? 0.1)).toFixed(2);
+    case 'km_x_sqrt_commits':
+      return +(km * Math.sqrt(c)).toFixed(2);
+    default:
+      return +(km * c).toFixed(2);
   }
-  return +(km * commits).toFixed(2);
 }
 
 // Per-event lap rules. Laps are TIMED from exiting the start box to
@@ -117,6 +128,7 @@ export function eventConfig(event) {
     maxAccuracyM: c.maxAccuracyM ?? 40,
     scoreFormula: c.scoreFormula ?? 'km_x_commits',
     commitWeight: c.commitWeight ?? 0.1,
+    commitCap: c.commitCap ?? null,
     minTeamSize: c.minTeamSize ?? 3, // event rule: teams of 3/4
     gate: c.gate ?? null, // [[lat,lng],[lat,lng]] timing line inside the start box
     // Which timing scores laps: 'exit_entry' (box timing, window over the

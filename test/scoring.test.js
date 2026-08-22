@@ -30,3 +30,10 @@ test('event status from window', () => {
   // pause flag is irrelevant once finished
   assert.equal(eventStatus({ ...ev, paused_at: '2026-08-29T11:00:00Z' }, Date.parse('2026-08-29T19:00:00Z')), 'finished');
 });
+
+test('teamScore formula variants and commit cap', () => {
+  assert.equal(teamScore(10, 25, { scoreFormula: 'km_x_sqrt_commits' }), 50); // 10 * sqrt(25)
+  assert.equal(teamScore(10, 100, { commitCap: 40 }), 400); // capped at 40
+  assert.equal(teamScore(10, 100, { scoreFormula: 'km_x_sqrt_commits', commitCap: 25 }), 50);
+  assert.equal(teamScore(10, 30, { scoreFormula: 'km_plus_commits', commitWeight: 0.5, commitCap: 20 }), 20);
+});

@@ -141,6 +141,7 @@ router.get('/:slug/board', async (req, res) => {
 
   const teams = await pool.query(
     `SELECT t.id, t.name, t.repo_url, t.commit_count, t.commit_override, t.score_adjust,
+            t.last_commit_msg, t.last_commit_author, t.last_commit_at, t.committers,
             am.name AS runner_name, am.last_fix AS runner_last_fix,
             ll.seconds AS last_lap_s, ll.counted AS last_lap_valid, ll.reject_reason AS last_lap_reason,
             COALESCE(l.valid, 0) AS valid_laps, COALESCE(l.invalid, 0) AS invalid_laps
@@ -180,6 +181,16 @@ router.get('/:slug/board', async (req, res) => {
         km,
         commits,
         repo: t.repo_url || null,
+        committers: t.committers ?? null,
+        lastCommit: t.last_commit_msg
+          ? {
+              message: t.last_commit_msg,
+              author: t.last_commit_author,
+              agoS: t.last_commit_at
+                ? Math.round((Date.now() - new Date(t.last_commit_at).getTime()) / 1000)
+                : null,
+            }
+          : null,
         score: +(teamScore(km, commits, config) + Number(t.score_adjust || 0)).toFixed(2),
         lastLap: t.last_lap_s != null
           ? { seconds: Math.round(t.last_lap_s), valid: t.last_lap_valid, reason: t.last_lap_reason }

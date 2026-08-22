@@ -194,9 +194,11 @@
             <label class="muted">score formula
               <select id="cfgFormula">
                 <option value="km_x_commits">km × commits</option>
+                <option value="km_x_sqrt_commits">km × √commits</option>
                 <option value="km_plus_commits">km + commits × weight</option>
               </select></label>
             <label class="muted">commit weight <input type="number" id="cfgWeight" value="0.1" step="0.05"></label>
+            <label class="muted" title="commits beyond this don't score (anti commit-spam); blank = no cap">commit cap <input type="number" id="cfgCap" placeholder="none"></label>
             <label class="muted" title="all three timings are recorded on every lap — this picks which one scores. exit→entry: window over the timed segment. gate / entry→entry: window over full lap metres.">official timing
               <select id="cfgOfficial">
                 <option value="exit_entry">start-box exit → entry</option>
@@ -471,6 +473,7 @@ function renderSetup() {
   cfgEntry.value = c.entryFixes ?? 1; cfgExit.value = c.exitFixes ?? 2;
   cfgFormula.value = c.scoreFormula ?? 'km_x_commits'; cfgWeight.value = c.commitWeight ?? 0.1;
   cfgOfficial.value = c.officialTiming ?? 'exit_entry';
+  cfgCap.value = c.commitCap ?? '';
   evStart.value = toLocalInput(cur.start_at); evEnd.value = toLocalInput(cur.end_at);
   document.getElementById('raceStatus').innerHTML =
     `status: <b style="color:${statusColour[statusOf(cur)]}">${statusOf(cur)}</b>`;
@@ -497,6 +500,7 @@ async function saveEvent() {
       minLapS: +cfgMin.value, maxLapS: +cfgMax.value,
       entryFixes: +cfgEntry.value, exitFixes: +cfgExit.value,
       scoreFormula: cfgFormula.value, commitWeight: +cfgWeight.value,
+      commitCap: cfgCap.value ? +cfgCap.value : null,
       officialTiming: cfgOfficial.value,
     },
   };
