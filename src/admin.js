@@ -104,14 +104,24 @@ router.post('/events/:slug/teams/:teamId/laps', async (req, res) => {
   res.json({ ok: true, inserted });
 });
 
-// Flip a lap between valid and invalid (move failed laps to real, or strike one).
+// Edit a lap: flip valid/invalid and/or correct its time.
 router.patch('/laps/:lapId', async (req, res) => {
-  const counted = !!req.body.counted;
+  const sets = [];
+  const vals = [];
+  if ('counted' in req.body) {
+    vals.push(!!req.body.counted);
+    sets.push(`counted = $${vals.length}`,
+      `reject_reason = CASE WHEN $${vals.length} THEN NULL ELSE 'admin_removed' END`);
+  }
+  if ('seconds' in req.body) {
+    vals.push(Math.max(0, Number(req.body.seconds) || 0));
+    sets.push(`seconds = $${vals.length}`);
+  }
+  if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
+  vals.push(req.params.lapId);
   const { rows } = await pool.query(
-    `UPDATE laps SET counted = $1,
-            reject_reason = CASE WHEN $1 THEN NULL ELSE 'admin_removed' END
-      WHERE id = $2 RETURNING *`,
-    [counted, req.params.lapId]
+    `UPDATE laps SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING *`,
+    vals
   );
   if (!rows[0]) return res.status(404).json({ error: 'no such lap' });
   res.json(rows[0]);
@@ -120,7 +130,7 @@ router.patch('/laps/:lapId', async (req, res) => {
 // Ops roster: every member with connection freshness, for on-the-day debugging.
 router.get('/events/:slug/members', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT m.id, m.name, m.user_id, m.activated_at, m.frozen_at, m.lap_count, m.last_fix,
+    `SELECT m.id, m.name, m.user_id, m.team_id, m.activated_at, m.frozen_at, m.lap_count, m.last_fix,
             t.name AS team, t.active_member_id = m.id AS is_active
        FROM members m JOIN teams t ON t.id = m.team_id
       WHERE m.event_id = (SELECT id FROM events WHERE slug = $1)
@@ -130,6 +140,8 @@ router.get('/events/:slug/members', async (req, res) => {
   res.json(rows.map((m) => ({
     ...m,
     lastPingAgoS: m.last_fix?.at ? Math.round((Date.now() - m.last_fix.at) / 1000) : null,
+    lat: m.last_fix?.lat ?? null,
+    lng: m.last_fix?.lng ?? null,
     last_fix: undefined,
   })));
 });

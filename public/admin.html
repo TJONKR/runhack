@@ -81,6 +81,18 @@
   #drawing-banner { background: var(--gold); color: var(--navy); padding: 8px 10px; border-radius: 4px;
                     display: none; margin: 8px 0; font-size: 13px; font-weight: 700; }
   .leaflet-container { background: #0C2140; }
+  #maparea { flex: 1; position: relative; min-width: 0; }
+  #map { position: absolute; inset: 0; }
+  #legend { position: absolute; top: 12px; right: 12px; z-index: 1000; background: rgba(8,24,47,0.92);
+            border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; min-width: 180px;
+            font-size: 12px; }
+  #legend .lrow { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+  #legend .ldot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  #legend .lstale { opacity: 0.4; }
+  #legend h3 { font-family: 'Geist Mono', monospace; font-size: 9px; letter-spacing: 0.2em;
+               text-transform: uppercase; color: rgba(244,243,239,0.5); margin: 0 0 6px; }
+  .vhandle { background: #fff; border: 2px solid var(--sky); border-radius: 2px; cursor: grab; }
+  .mhandle { background: var(--gold); border: 2px solid var(--navy); border-radius: 50%; cursor: move; }
 
   #tab-board { height: 100%; }
   #boardFrame { width: 100%; height: 100%; border: 0; display: block; }
@@ -224,6 +236,17 @@
       <div class="wrap">
         <h2>Runners <span style="color:rgba(244,243,239,0.4)">(auto-refreshes)</span></h2>
         <div id="rosterList" class="muted">—</div>
+        <h2>Add runner manually</h2>
+        <div class="card">
+          <div class="row">
+            <select id="newRunnerTeam" style="width:auto;flex:1"></select>
+            <input type="text" id="newRunnerName" placeholder="runner name" style="flex:1"
+                   onkeydown="if(event.key==='Enter')addRunner()">
+            <button class="primary" onclick="addRunner()">Add runner</button>
+          </div>
+          <span class="muted">For when the join page fails on a phone — the runner appears below;
+            use their <b>cfg</b> button to connect their Traccar.</span>
+        </div>
       </div>
     </div>
 
@@ -254,7 +277,10 @@
         <button onclick="startSim()">▶ Start sim runner</button>
         <div id="simList"></div>
       </div>
-      <div id="map"></div>
+      <div id="maparea">
+        <div id="map"></div>
+        <div id="legend" style="display:none"></div>
+      </div>
     </div>
 
   </div>
@@ -565,19 +591,40 @@ async function toggleLaps(teamId) {
        <span style="flex:1">${new Date(l.finished_at).toLocaleTimeString()} · ${Math.round(l.seconds)}s
          · ${l.runner || 'manual'}${l.manual ? ' (manual)' : ''}
          <span style="color:${l.counted ? 'var(--ok)' : 'var(--orange)'}">${l.counted ? '✓ valid' : '✕ ' + (l.reject_reason || 'invalid')}</span></span>
+       <button onclick="editLapSeconds(${l.id}, ${Math.round(l.seconds)}, ${teamId})">edit s</button>
        <button onclick="flipLap(${l.id}, ${!l.counted}, ${teamId})">${l.counted ? 'invalidate' : 'make valid'}</button>
      </div>`).join('') || '<span class="muted">no laps yet</span>';
 }
-async function flipLap(lapId, counted, teamId) {
-  await fetch(`/api/admin/laps/${lapId}`, { method: 'PATCH', headers: H(), body: JSON.stringify({ counted }) });
+async function patchLap(lapId, body, teamId) {
+  await fetch(`/api/admin/laps/${lapId}`, { method: 'PATCH', headers: H(), body: JSON.stringify(body) });
   const panel = document.getElementById(`laps-${teamId}`);
   panel.style.display = 'none';
   toggleLaps(teamId);
 }
+const flipLap = (lapId, counted, teamId) => patchLap(lapId, { counted }, teamId);
+function editLapSeconds(lapId, current, teamId) {
+  const v = prompt('Lap time in seconds:', current);
+  if (v === null) return;
+  patchLap(lapId, { seconds: +v }, teamId);
+}
 
 /* ---------- runners tab ---------- */
+async function addRunner() {
+  const teamId = +document.getElementById('newRunnerTeam').value;
+  const name = document.getElementById('newRunnerName').value.trim();
+  if (!teamId || !name) return;
+  const r = await fetch(`/api/${cur.slug}/members`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ teamId, name }),
+  });
+  if (!r.ok) return alert('failed: ' + (await r.text()));
+  document.getElementById('newRunnerName').value = '';
+  loadRoster();
+}
 async function loadRoster() {
   if (!cur) return;
+  document.getElementById('newRunnerTeam').innerHTML =
+    (cur.teams || []).map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
   const roster = await (await fetch(`/api/admin/events/${cur.slug}/members`, { headers: H() })).json();
   document.getElementById('rosterList').innerHTML = roster.map((m) => {
     const ping = m.lastPingAgoS == null ? 'never pinged'
@@ -655,8 +702,58 @@ function openMap() {
   if (zones[0]?.polygon?.[0]) map.setView(zones[0].polygon[0], 17);
   document.getElementById('simTeam').innerHTML =
     (cur.teams || []).map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
+  refreshLive();
 }
+
+/* ---------- live runners on the map ---------- */
+const PALETTE = ['#F0BE2A', '#3A90E6', '#4ade80', '#DD6A24', '#e879f9', '#f87171', '#2dd4bf', '#a3e635'];
+function teamColour(teamId) {
+  const idx = (cur.teams || []).findIndex((t) => t.id === teamId);
+  return PALETTE[(idx < 0 ? 0 : idx) % PALETTE.length];
+}
+let liveMarkers = {}; // memberId -> circleMarker
+async function refreshLive() {
+  if (!cur || curTab !== 'map' || !map) return;
+  const r = await fetch(`/api/admin/events/${cur.slug}/members`, { headers: H() });
+  if (!r.ok) return;
+  const roster = await r.json();
+  const live = roster.filter((m) => m.is_active && !m.frozen_at && m.lat != null);
+
+  const seen = new Set();
+  live.forEach((m) => {
+    seen.add(m.id);
+    const stale = m.lastPingAgoS == null || m.lastPingAgoS > 30;
+    const col = teamColour(m.team_id);
+    if (!liveMarkers[m.id]) {
+      liveMarkers[m.id] = L.circleMarker([m.lat, m.lng], { radius: 8, weight: 2 })
+        .bindTooltip('', { direction: 'top' }).addTo(map);
+    }
+    liveMarkers[m.id]
+      .setLatLng([m.lat, m.lng])
+      .setStyle({ color: col, fillColor: col, fillOpacity: stale ? 0.15 : 0.85, opacity: stale ? 0.4 : 1 })
+      .setTooltipContent(`${m.name} · ${m.team} · ${m.lap_count} laps${stale ? ' · signal lost' : ''}`);
+  });
+  Object.keys(liveMarkers).forEach((id) => {
+    if (!seen.has(+id)) { map.removeLayer(liveMarkers[id]); delete liveMarkers[id]; }
+  });
+
+  // Mini legend: one row per team, its colour + active runner + freshness.
+  const legend = document.getElementById('legend');
+  const rows = (cur.teams || []).map((t) => {
+    const m = live.find((x) => x.team_id === t.id);
+    const stale = m && (m.lastPingAgoS == null || m.lastPingAgoS > 30);
+    return `<div class="lrow${m && stale ? ' lstale' : ''}">
+      <span class="ldot" style="background:${teamColour(t.id)}"></span>
+      <b>${t.name}</b>
+      <span class="muted" style="margin-left:auto">${m ? (stale ? 'signal lost' : m.name) : 'no runner'}</span>
+    </div>`;
+  }).join('');
+  legend.innerHTML = `<h3>Runners</h3>${rows || '<span class="muted">no teams</span>'}`;
+  legend.style.display = '';
+}
+setInterval(refreshLive, 3000);
 function redrawZones() {
+  stopEditZone(false);
   zoneLayers.forEach((l) => map.removeLayer(l));
   zoneLayers = zones.map((z, i) =>
     L.polygon(z.polygon, { color: colour(i), weight: 2 })
@@ -667,11 +764,15 @@ function redrawZones() {
   zones.forEach((z, i) => {
     const row = document.createElement('div');
     row.className = 'zone-row';
+    const isEditing = editing && editing.i === i;
     row.innerHTML = `<span class="idx" style="color:${colour(i)}">${i}</span>
       <input type="text" value="${z.name}" onchange="zones[${i}].name=this.value" style="flex:1">
-      <button onclick="moveZone(${i},-1)">↑</button>
-      <button onclick="moveZone(${i},1)">↓</button>
-      <button onclick="zones.splice(${i},1);redrawZones()">✕</button>`;
+      ${isEditing
+        ? `<button class="primary" onclick="stopEditZone()">done</button>`
+        : `<button onclick="editZone(${i})" title="drag corners; gold handle moves the whole zone">✎ edit</button>`}
+      <button onclick="moveZone(${i},-1)" title="earlier in lap order">↑</button>
+      <button onclick="moveZone(${i},1)" title="later in lap order">↓</button>
+      <button onclick="if(confirm('Delete zone ${i}?')){zones.splice(${i},1);redrawZones()}">✕</button>`;
     document.getElementById('zoneList').appendChild(row);
   });
 }
@@ -680,6 +781,55 @@ function moveZone(i, d) {
   if (j < 0 || j >= zones.length) return;
   [zones[i], zones[j]] = [zones[j], zones[i]];
   redrawZones();
+}
+
+/* ---------- zone editing: drag corners, drag the gold handle to move all ---------- */
+let editing = null; // { i, handles: [], mover }
+function editZone(i) {
+  stopEditZone(false);
+  const vIcon = L.divIcon({ className: 'vhandle', iconSize: [12, 12] });
+  const mIcon = L.divIcon({ className: 'mhandle', iconSize: [18, 18] });
+  editing = { i, handles: [], mover: null };
+  zones[i].polygon.forEach((pt, v) => {
+    const h = L.marker(pt, { draggable: true, icon: vIcon }).addTo(map);
+    h.on('drag', (e) => {
+      zones[i].polygon[v] = [e.latlng.lat, e.latlng.lng];
+      zoneLayers[i].setLatLngs(zones[i].polygon);
+      editing.mover.setLatLng(centroid(zones[i].polygon));
+    });
+    editing.handles.push(h);
+  });
+  editing.mover = L.marker(centroid(zones[i].polygon), { draggable: true, icon: mIcon })
+    .bindTooltip('drag to move the whole zone').addTo(map);
+  let prev = null;
+  editing.mover.on('dragstart', (e) => { prev = e.target.getLatLng(); });
+  editing.mover.on('drag', (e) => {
+    const dLat = e.latlng.lat - prev.lat, dLng = e.latlng.lng - prev.lng;
+    prev = e.latlng;
+    zones[i].polygon = zones[i].polygon.map((p) => [p[0] + dLat, p[1] + dLng]);
+    zoneLayers[i].setLatLngs(zones[i].polygon);
+    editing.handles.forEach((h, v) => h.setLatLng(zones[i].polygon[v]));
+  });
+  renderZoneList();
+}
+function stopEditZone(rerender = true) {
+  if (!editing) return;
+  editing.handles.forEach((h) => map.removeLayer(h));
+  if (editing.mover) map.removeLayer(editing.mover);
+  editing = null;
+  if (rerender) redrawZones();
+}
+function renderZoneList() {
+  // re-render just the sidebar list so edit/done buttons update without
+  // touching the polygons mid-edit
+  const list = document.getElementById('zoneList');
+  [...list.children].forEach((row, i) => {
+    const btns = row.querySelectorAll('button');
+    const isEditing = editing && editing.i === i;
+    btns[0].outerHTML = isEditing
+      ? `<button class="primary" onclick="stopEditZone()">done</button>`
+      : `<button onclick="editZone(${i})" title="drag corners; gold handle moves the whole zone">✎ edit</button>`;
+  });
 }
 function startZone() {
   drawing = { points: [], markers: [], line: null };
