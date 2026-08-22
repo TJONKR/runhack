@@ -80,7 +80,7 @@ async function fetchCommitters(repoUrl, sinceIso, untilIso) {
   return who.size;
 }
 
-async function pollOnce() {
+export async function pollOnce() {
   const { rows } = await pool.query(
     `SELECT t.id, t.repo_url, e.start_at, e.end_at, e.created_at
        FROM teams t JOIN events e ON e.id = t.event_id

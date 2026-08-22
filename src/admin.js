@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from './db.js';
-import { countCommits } from './github.js';
+import { countCommits, pollOnce } from './github.js';
 
 const router = Router();
 
@@ -304,6 +304,112 @@ router.delete('/members/:memberId', async (req, res) => {
   await pool.query('UPDATE laps SET member_id = NULL WHERE member_id = $1', [req.params.memberId]);
   await pool.query('DELETE FROM members WHERE id = $1', [req.params.memberId]); // devices: member_id -> NULL via FK
   res.json({ ok: true });
+});
+
+// Populate this event with realistic live-race test data: dates moved to
+// mid-race, test teams with people + devices, a filled leaderboard, live-ish
+// positions, and busy public repos so the commit poller returns real numbers.
+router.post('/events/:slug/populate-test', async (req, res) => {
+  const ev = await pool.query('SELECT * FROM events WHERE slug = $1', [req.params.slug]);
+  const event = ev.rows[0];
+  if (!event) return res.status(404).json({ error: 'no such event' });
+
+  // Mid-race: started 4h ago, ends in 4h.
+  await pool.query(
+    `UPDATE events SET start_at = now() - interval '4 hours',
+            end_at = now() + interval '4 hours', paused_at = NULL WHERE id = $1`,
+    [event.id]
+  );
+  const startMs = Date.now() - 4 * 3600e3;
+
+  // Base point for fake positions: first zone's first corner, else the track.
+  const base = event.zones?.[0]?.polygon?.[0] || [51.5388, -0.0166];
+
+  // Busy public repos -> real commits inside a 4h window.
+  const TEAMS = [
+    { name: 'Bit Runners', repo: 'https://github.com/NixOS/nixpkgs' },
+    { name: 'Ctrl Alt Elite', repo: 'https://github.com/microsoft/vscode' },
+    { name: 'Fork & Sprint', repo: 'https://github.com/home-assistant/core' },
+    { name: 'Push It Real Good', repo: 'https://github.com/llvm/llvm-project' },
+    { name: 'Segfault Striders', repo: 'https://github.com/godotengine/godot' },
+  ];
+  const NAMES = ['Maya', 'Jonas', 'Priya', 'Tom', 'Ada', 'Leo', 'Zoe', 'Kai', 'Nina', 'Omar',
+    'Ella', 'Finn', 'Ruth', 'Igor', 'Sana', 'Hugo', 'Iris', 'Noah', 'Lena', 'Ezra'];
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const created = { teams: 0, members: 0, devices: 0, laps: 0 };
+  let nameIdx = 0;
+
+  for (let ti = 0; ti < TEAMS.length; ti++) {
+    const spec = TEAMS[ti];
+    const t = await pool.query(
+      `INSERT INTO teams (event_id, name, repo_url) VALUES ($1, $2, $3)
+       ON CONFLICT (event_id, name) DO UPDATE SET repo_url = $3 RETURNING id`,
+      [event.id, spec.name, spec.repo]
+    );
+    const teamId = t.rows[0].id;
+    created.teams++;
+
+    // 3-4 people, each with a phone; plus a shared team phone for one team.
+    const memberCount = 3 + (ti % 2);
+    const members = [];
+    for (let i = 0; i < memberCount; i++) {
+      const m = await pool.query(
+        'INSERT INTO members (event_id, team_id, name) VALUES ($1, $2, $3) RETURNING id, name',
+        [event.id, teamId, NAMES[nameIdx++ % NAMES.length]]
+      );
+      members.push(m.rows[0]);
+      created.members++;
+    }
+    const devices = [];
+    for (const m of members) {
+      const token = 'test_' + Math.random().toString(36).slice(2, 14);
+      // Freshness variety: team 0 healthy, team 1 signal-lost, others mixed.
+      const agoS = ti === 1 ? 300 : Math.round(rnd(3, ti === 2 ? 90 : 25));
+      const d = await pool.query(
+        `INSERT INTO devices (event_id, team_id, member_id, token, name, activated_at, last_fix, lap_count)
+         VALUES ($1, $2, $3, $4, $5, now() - interval '3 hours', $6, 0) RETURNING id`,
+        [event.id, teamId, m.id, token, m.name,
+          { lat: base[0] + rnd(-0.0004, 0.0004), lng: base[1] + rnd(-0.0006, 0.0006),
+            accuracyM: Math.round(rnd(5, 15)), at: Date.now() - agoS * 1000 }]
+      );
+      devices.push({ id: d.rows[0].id, memberId: m.id });
+      created.devices++;
+    }
+    await pool.query('UPDATE teams SET active_device_id = $1 WHERE id = $2', [devices[0].id, teamId]);
+
+    // Laps across the elapsed 4h: different volumes per team, mostly valid,
+    // sprinkled invalids, attributed round-robin across the roster.
+    const lapCount = 18 + ti * 7 + Math.round(rnd(0, 6));
+    const elapsed = Date.now() - startMs;
+    const deviceLaps = new Map();
+    for (let i = 0; i < lapCount; i++) {
+      const at = new Date(startMs + (elapsed * (i + 0.5)) / lapCount + rnd(-30e3, 30e3));
+      const secs = rnd(62, 98);
+      const bad = Math.random() < 0.12;
+      const reason = bad ? ['too_slow', 'too_fast', 'too_soon'][Math.floor(rnd(0, 3))] : null;
+      const who = devices[i % devices.length];
+      await pool.query(
+        `INSERT INTO laps (event_id, team_id, member_id, device_id, seconds, counted, reject_reason,
+                           entry_seconds, gate_seconds, finished_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [event.id, teamId, who.memberId, who.id,
+          bad && reason === 'too_slow' ? secs + 90 : secs, !bad, reason,
+          secs + rnd(8, 16), Math.random() < 0.7 ? secs + rnd(-2, 2) : null, at]
+      );
+      if (!bad) deviceLaps.set(who.id, (deviceLaps.get(who.id) || 0) + 1);
+      created.laps++;
+    }
+    for (const [devId, n] of deviceLaps) {
+      await pool.query('UPDATE devices SET lap_count = $1, last_lap_s = $2 WHERE id = $3', [
+        n, Math.round(rnd(65, 92)), devId,
+      ]);
+    }
+  }
+
+  // Pull real commit counts + latest commit lines for the new repos now.
+  pollOnce().catch(() => {});
+
+  res.json({ ok: true, ...created });
 });
 
 // Delete a whole event (old tests, duplicates). Everything under it goes.

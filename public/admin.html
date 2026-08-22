@@ -233,6 +233,11 @@
             <button class="danger" onclick="deleteEvent()">⚠ Delete event</button>
             <span class="muted" style="flex:1">removes this event and everything under it</span>
           </div>
+          <div class="row">
+            <button onclick="populateTest()" style="border-color:var(--sky);color:var(--sky)">🧪 Populate test data</button>
+            <span class="muted" style="flex:1">moves dates to mid-race and fills this event with test teams,
+              runners, devices and a live-looking leaderboard (real public repos for commits)</span>
+          </div>
         </div>
       </div>
     </div>
@@ -542,6 +547,14 @@ async function control(action) {
 async function resetRace() {
   if (!confirm(`Wipe ALL laps and runners for "${cur.slug}"? Teams and config survive.`)) return;
   await fetch(`/api/admin/events/${cur.slug}/reset`, { method: 'POST', headers: H() });
+  openEvent(cur.slug, curTab);
+}
+async function populateTest() {
+  if (!confirm(`Fill "${cur.slug}" with test data? Its dates move to mid-race and test teams/laps are added.`)) return;
+  const r = await fetch(`/api/admin/events/${cur.slug}/populate-test`, { method: 'POST', headers: H() });
+  if (!r.ok) return alert('failed: ' + (await r.text()));
+  const s = await r.json();
+  alert(`Done: ${s.teams} teams, ${s.members} runners, ${s.devices} devices, ${s.laps} laps. Commits are being pulled from GitHub now.`);
   openEvent(cur.slug, curTab);
 }
 async function deleteEvent() {
