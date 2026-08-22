@@ -550,8 +550,11 @@ async function resetRace() {
   openEvent(cur.slug, curTab);
 }
 async function populateTest() {
-  if (!confirm(`Fill "${cur.slug}" with test data? Its dates move to mid-race and test teams/laps are added.`)) return;
-  const r = await fetch(`/api/admin/events/${cur.slug}/populate-test`, { method: 'POST', headers: H() });
+  const teams = prompt(`Fill "${cur.slug}" with test data? Its dates move to mid-race.\nHow many test teams (1-30)?`, '30');
+  if (teams === null) return;
+  const r = await fetch(`/api/admin/events/${cur.slug}/populate-test`, {
+    method: 'POST', headers: H(), body: JSON.stringify({ teams: +teams }),
+  });
   if (!r.ok) return alert('failed: ' + (await r.text()));
   const s = await r.json();
   alert(`Done: ${s.teams} teams, ${s.members} runners, ${s.devices} devices, ${s.laps} laps. Commits are being pulled from GitHub now.`);

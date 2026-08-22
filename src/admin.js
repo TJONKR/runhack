@@ -325,14 +325,28 @@ router.post('/events/:slug/populate-test', async (req, res) => {
   // Base point for fake positions: first zone's first corner, else the track.
   const base = event.zones?.[0]?.polygon?.[0] || [51.5388, -0.0166];
 
-  // Busy public repos -> real commits inside a 4h window.
-  const TEAMS = [
-    { name: 'Bit Runners', repo: 'https://github.com/NixOS/nixpkgs' },
-    { name: 'Ctrl Alt Elite', repo: 'https://github.com/microsoft/vscode' },
-    { name: 'Fork & Sprint', repo: 'https://github.com/home-assistant/core' },
-    { name: 'Push It Real Good', repo: 'https://github.com/llvm/llvm-project' },
-    { name: 'Segfault Striders', repo: 'https://github.com/godotengine/godot' },
+  // Busy public repos -> real commits inside a 4h window; 30 distinct repos
+  // makes GitHub polling load realistic at full event scale.
+  const TEAM_NAMES = [
+    'Bit Runners', 'Ctrl Alt Elite', 'Fork & Sprint', 'Push It Real Good', 'Segfault Striders',
+    'Race Condition', 'The Long Pollers', 'Git Outta Here', 'Cache Me Outside', 'Sprint Boot',
+    'Runtime Terrors', 'Async Athletes', 'The Marathon Mergers', 'Hot Reloaders', 'Loop Unrollers',
+    'Tail Callers', 'The Breakpoints', 'Jog Scheduler', 'Fast Fourier Transforms', 'Heap Sprinters',
+    'The Idempotents', 'Lap Reduce', 'Branch Predictors', 'Sweaty Palindromes', 'The Deadlocks',
+    'Pace Invaders', 'Off By One Mile', 'The Garbage Collectors', 'Quantum Sprinters', 'Null Pace Exception',
   ];
+  const REPOS = [
+    'NixOS/nixpkgs', 'microsoft/vscode', 'home-assistant/core', 'llvm/llvm-project', 'godotengine/godot',
+    'rust-lang/rust', 'python/cpython', 'kubernetes/kubernetes', 'torvalds/linux', 'nodejs/node',
+    'facebook/react', 'flutter/flutter', 'microsoft/TypeScript', 'git/git', 'golang/go',
+    'apache/spark', 'elastic/elasticsearch', 'grafana/grafana', 'ansible/ansible', 'odoo/odoo',
+    'zephyrproject-rtos/zephyr', 'WebKit/WebKit', 'dotnet/runtime', 'JuliaLang/julia', 'ClickHouse/ClickHouse',
+    'cockroachdb/cockroach', 'DefinitelyTyped/DefinitelyTyped', 'angular/angular', 'vercel/next.js', 'pytorch/pytorch',
+  ];
+  const teamCount = Math.min(TEAM_NAMES.length, Math.max(1, Math.round(Number(req.body?.teams) || 5)));
+  const TEAMS = TEAM_NAMES.slice(0, teamCount).map((name, i) => ({
+    name, repo: `https://github.com/${REPOS[i % REPOS.length]}`,
+  }));
   const NAMES = ['Maya', 'Jonas', 'Priya', 'Tom', 'Ada', 'Leo', 'Zoe', 'Kai', 'Nina', 'Omar',
     'Ella', 'Finn', 'Ruth', 'Igor', 'Sana', 'Hugo', 'Iris', 'Noah', 'Lena', 'Ezra'];
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -379,7 +393,7 @@ router.post('/events/:slug/populate-test', async (req, res) => {
 
     // Laps across the elapsed 4h: different volumes per team, mostly valid,
     // sprinkled invalids, attributed round-robin across the roster.
-    const lapCount = 18 + ti * 7 + Math.round(rnd(0, 6));
+    const lapCount = 15 + (ti % 10) * 6 + Math.round(rnd(0, 8));
     const elapsed = Date.now() - startMs;
     const deviceLaps = new Map();
     for (let i = 0; i < lapCount; i++) {
