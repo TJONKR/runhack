@@ -67,6 +67,10 @@
   <div>
     <div class="qr"><img id="qr" alt="team join QR"></div>
     <div class="qr-label">Scan to run for this team</div>
+    <button id="copyJoin" style="width:100%;margin-top:10px;padding:9px;font-family:'Geist Mono',monospace;
+      font-size:10px;letter-spacing:0.15em;text-transform:uppercase;background:transparent;
+      color:rgba(244,243,239,0.7);border:1px solid rgba(244,243,239,0.3);border-radius:4px;cursor:pointer">
+      Copy join link</button>
   </div>
   <div>
     <h1 id="teamname"></h1>
@@ -86,6 +90,12 @@
 const [, slug, , teamId] = location.pathname.split('/');
 const joinUrl = `${location.origin}/${slug}/join?team=${teamId}`;
 document.getElementById('qr').src = `/qr.svg?text=${encodeURIComponent(joinUrl)}`;
+document.getElementById('copyJoin').onclick = (e) => {
+  navigator.clipboard?.writeText(joinUrl).then(() => {
+    e.target.textContent = 'Copied ✓';
+    setTimeout(() => (e.target.textContent = 'Copy join link'), 1200);
+  }, () => prompt('Copy:', joinUrl));
+};
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 async function tick() {

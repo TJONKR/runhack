@@ -11,7 +11,9 @@
   :root { --paper: #F4F3EF; --navy: #08182F; --navy2: #0C2140; --blue: #1311D1;
           --orange: #DD6A24; --gold: #F0BE2A; --sky: #3A90E6; --ok: #4ade80; }
   * { box-sizing: border-box; }
-  body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy); color: var(--paper); }
+  html, body { height: 100%; }
+  body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy); color: var(--paper);
+         display: flex; flex-direction: column; }
   header { background: var(--blue); border-bottom: 4px solid var(--gold); padding: 26px 24px;
            text-align: center; position: relative; }
   .wordmark { font-weight: 900; font-size: 44px; letter-spacing: -2px; }
@@ -22,7 +24,15 @@
              font-family: 'Geist Mono', monospace; font-size: 8px; letter-spacing: 0.28em;
              text-transform: uppercase; color: rgba(244,243,239,0.55); }
   .powered img { height: 14px; display: block; }
-  main { max-width: 720px; margin: 0 auto; padding: 30px 20px 60px; }
+  main { max-width: 720px; margin: 0 auto; padding: 30px 20px 60px; width: 100%; flex: 1; }
+  footer { padding: 16px 0 22px; border-top: 1px solid rgba(244,243,239,0.1); overflow: hidden; width: 100%; }
+  .brands { display: flex; gap: 56px; align-items: center; width: max-content; animation: marquee 120s linear infinite; }
+  .brands img { height: 20px; opacity: 0.8; }
+  .brands img.partner { filter: brightness(0) invert(1); }
+  .sponsor-tile { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.25em;
+                  text-transform: uppercase; color: rgba(244,243,239,0.35); white-space: nowrap;
+                  border: 1px dashed rgba(244,243,239,0.25); padding: 6px 14px; }
+  @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
   h2 { font-family: 'Geist Mono', monospace; font-size: 11px; margin: 30px 0 10px; text-transform: uppercase;
        letter-spacing: 0.25em; color: var(--sky); }
   a.card { display: flex; align-items: center; gap: 14px; background: var(--navy2);
@@ -55,6 +65,27 @@
   <div class="powered">Powered by <img src="/brands/02-roxfit.png" alt="ROXFIT"></div>
 </header>
 <main id="main"></main>
+<footer><div class="brands" id="brands"></div></footer>
+<script>
+// Sponsor marquee — same pattern as the board: RUN/HACK · ROXFIT · partner, repeat.
+async function loadBrands() {
+  try {
+    const files = await (await fetch('/api/brands')).json();
+    const img = (f, cls = '') => `<img src="${f}" alt=""${cls ? ` class="${cls}"` : ''}>`;
+    const anchors = files.filter((f) => /\/0[12]-/.test(f)).map((f) => img(f)).join('');
+    const partners = files.filter((f) => !/\/0[12]-/.test(f));
+    let strip = partners.length
+      ? partners.map((p) => anchors + img(p, 'partner')).join('')
+      : (anchors + `<span class="sponsor-tile">Sponsor</span>`).repeat(4);
+    while (strip.length && (strip.match(/<img/g) || []).length < 24) strip += strip;
+    const el = document.getElementById('brands');
+    el.innerHTML = strip + strip;
+    await Promise.allSettled([...el.querySelectorAll('img')].map((i) => i.decode()));
+    el.style.animationDuration = `${(el.scrollWidth / 2) / 30}s`; // 30 px/s
+  } catch {}
+}
+loadBrands();
+</script>
 <script>
 const COLOURS = { live: 'var(--ok)', paused: 'var(--gold)', upcoming: 'var(--sky)', finished: 'var(--orange)' };
 const LABELS = { live: 'live now', paused: 'paused', upcoming: 'upcoming', finished: 'finished' };

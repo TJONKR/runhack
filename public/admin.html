@@ -151,12 +151,13 @@
       <div id="eventList"></div>
       <h2>New event</h2>
       <div class="card">
-        <div class="grid2">
-          <input type="text" id="newSlug" placeholder="slug (e.g. london)">
-          <input type="text" id="newName" placeholder="name (e.g. RUN/HACK London)">
+        <div class="row">
+          <input type="text" id="newSlug" placeholder="slug (e.g. london)" style="flex:1"
+                 onkeydown="if(event.key==='Enter')createNewEvent()">
+          <input type="text" id="newName" placeholder="name (e.g. RUN/HACK London)" style="flex:2"
+                 onkeydown="if(event.key==='Enter')createNewEvent()">
+          <button class="primary" onclick="createNewEvent()">Create event →</button>
         </div>
-        <button class="primary" onclick="createNewEvent()">Create event →</button>
-        <span class="muted">then draw its zones in the Map tab</span>
       </div>
     </div>
   </div>
@@ -488,11 +489,15 @@ function renderSetup() {
   const pb = document.getElementById('pauseBtn');
   pb.textContent = cur.paused_at ? '▶ Resume' : '⏸ Pause';
   pb.onclick = () => control(cur.paused_at ? 'resume' : 'pause');
-  document.getElementById('links').innerHTML = `
-    <span class="muted">Join (generic — team QRs are on each team page):</span>
-    <div class="url">${location.origin}/${cur.slug}/join</div>
-    <span class="muted">Venue board:</span> <div class="url">${location.origin}/${cur.slug}/board</div>
-    <span class="muted">Public API:</span> <div class="url">${location.origin}/api/${cur.slug}/board</div>`;
+  const linkRow = (label, url) => `
+    <span class="muted">${label}</span>
+    <div class="row"><div class="url" style="flex:1;margin:2px 0">${url}</div>
+      <button onclick="copyText('${url}', this)">copy</button></div>`;
+  document.getElementById('links').innerHTML =
+    linkRow('Public landing:', `${location.origin}/`) +
+    linkRow('Join (generic — team QRs are on each team page):', `${location.origin}/${cur.slug}/join`) +
+    linkRow('Venue board:', `${location.origin}/${cur.slug}/board`) +
+    linkRow('Public API:', `${location.origin}/api/${cur.slug}/board`);
 }
 async function saveEvent() {
   const body = {
@@ -586,6 +591,7 @@ function renderTeams() {
         <span class="muted">links:</span>
         <button onclick="copyText('${location.origin}/${cur.slug}/join?team=${t.id}', this)">copy join link</button>
         <button onclick="copyText('${location.origin}/${cur.slug}/team/${t.id}', this)">copy team page</button>
+        <button onclick="copyText('${location.origin}/qr.svg?text=' + encodeURIComponent('${location.origin}/${cur.slug}/join?team=${t.id}'), this)" title="direct link to the printable QR image">copy QR</button>
         <button onclick="copyText('${t.id}', this)">copy id</button>
         <span class="muted" style="margin-left:10px">score:</span>
         <button onclick="overrideCommits(${t.id})" title="manual commit count; blank = back to GitHub auto">override commits</button>
