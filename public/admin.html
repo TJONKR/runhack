@@ -11,41 +11,86 @@
   :root {
     --paper: #F4F3EF; --navy: #08182F; --navy2: #0C2140; --blue: #1311D1;
     --orange: #DD6A24; --gold: #F0BE2A; --sky: #3A90E6; --line: rgba(244,243,239,0.12);
+    --ok: #4ade80;
   }
   * { box-sizing: border-box; }
-  body { font-family: 'Geist', system-ui, sans-serif; margin: 0; display: flex; height: 100vh;
-         background: var(--navy); color: var(--paper); }
-  #side { width: 400px; overflow-y: auto; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
-  #map { flex: 1; }
+  html, body { height: 100%; }
+  body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy);
+         color: var(--paper); display: flex; flex-direction: column; }
 
-  .brand { background: var(--blue); padding: 16px 20px; border-bottom: 3px solid var(--gold); }
-  .wordmark { font-weight: 900; font-size: 24px; letter-spacing: -1px; }
+  /* top bar */
+  .topbar { background: var(--blue); border-bottom: 3px solid var(--gold); padding: 0 20px;
+            display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .wordmark { font-weight: 900; font-size: 22px; letter-spacing: -1px; padding: 12px 0; white-space: nowrap; }
   .wordmark .slash { color: var(--orange); }
-  .brand small { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.2em;
-                 text-transform: uppercase; color: rgba(244,243,239,0.6); display: block; margin-top: 2px; }
-  .pad { padding: 16px 20px; }
+  .wordmark small { font-family: 'Geist Mono', monospace; font-size: 9px; letter-spacing: 0.2em;
+                    text-transform: uppercase; color: rgba(244,243,239,0.6); display: block; }
+  .crumb { font-family: 'Geist Mono', monospace; font-size: 12px; letter-spacing: 0.1em;
+           text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+  .crumb a { color: rgba(244,243,239,0.7); text-decoration: none; cursor: pointer; }
+  .crumb a:hover { color: var(--paper); }
+  .crumb b { color: var(--gold); }
+  .statuschip { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.15em;
+                text-transform: uppercase; padding: 3px 10px; border-radius: 999px; border: 1px solid; }
+  .tabs { display: flex; gap: 2px; margin-left: auto; align-self: flex-end; }
+  .tabs button { background: transparent; border: 0; color: rgba(244,243,239,0.65); padding: 12px 16px;
+                 font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.15em;
+                 text-transform: uppercase; cursor: pointer; border-bottom: 3px solid transparent;
+                 margin-bottom: -3px; border-radius: 0; }
+  .tabs button:hover { color: var(--paper); }
+  .tabs button.on { color: var(--paper); border-bottom-color: var(--paper); font-weight: 600; }
 
-  h2 { font-family: 'Geist Mono', monospace; font-size: 11px; margin: 24px 0 10px; text-transform: uppercase;
+  main { flex: 1; min-height: 0; overflow-y: auto; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 24px; }
+
+  h2 { font-family: 'Geist Mono', monospace; font-size: 11px; margin: 26px 0 10px; text-transform: uppercase;
        letter-spacing: 0.2em; color: var(--sky); }
   h2:first-child { margin-top: 0; }
   input, button, select { font: inherit; padding: 8px 10px; margin: 2px 0; border-radius: 4px; }
   input, select { width: 100%; background: var(--navy2); border: 1px solid var(--line); color: var(--paper); }
   input:focus, select:focus { outline: 2px solid var(--sky); border-color: transparent; }
-  button { cursor: pointer; background: var(--navy2); border: 1px solid var(--line); color: var(--paper); }
+  button { cursor: pointer; background: var(--navy2); border: 1px solid var(--line); color: var(--paper); width: auto; }
   button:hover { border-color: var(--sky); }
   button.primary { background: var(--gold); border: 0; color: var(--navy); font-weight: 700; }
   button.primary:hover { background: #ffd34d; }
-  .zone-row, .team-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
-  .zone-row .idx { font-family: 'Geist Mono', monospace; font-weight: 600; width: 22px; }
-  .zone-row button, .team-row button { padding: 4px 8px; }
+  button.danger { border-color: var(--orange); color: var(--orange); }
+  .row { display: flex; align-items: center; gap: 6px; padding: 3px 0; flex-wrap: wrap; }
+  .row button { padding: 4px 8px; }
   .muted { color: rgba(244,243,239,0.45); font-size: 12px; }
   label.muted { display: block; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  #drawing-banner { background: var(--gold); color: var(--navy); padding: 8px 10px; border-radius: 4px;
-                    display: none; margin: 8px 0; font-size: 13px; font-weight: 700; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .card { background: var(--navy2); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; margin: 8px 0; }
   .url { font-family: 'Geist Mono', monospace; font-size: 11px; word-break: break-all;
          background: var(--navy2); padding: 6px 8px; border-radius: 4px; margin: 4px 0 10px;
          border: 1px solid var(--line); }
+
+  /* events list */
+  .eventcard { display: flex; align-items: center; gap: 14px; cursor: pointer; }
+  .eventcard:hover { border-color: var(--sky); }
+  .eventcard .name { font-weight: 700; font-size: 17px; }
+  .eventcard .meta { font-family: 'Geist Mono', monospace; font-size: 11px; color: rgba(244,243,239,0.5); }
+
+  /* map tab */
+  #tab-map { display: flex; height: 100%; min-height: 0; }
+  #mapside { width: 340px; overflow-y: auto; padding: 16px 20px; border-right: 1px solid var(--line); }
+  #map { flex: 1; }
+  .zone-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+  .zone-row .idx { font-family: 'Geist Mono', monospace; font-weight: 600; width: 22px; }
+  .zone-row button { padding: 4px 8px; }
+  #drawing-banner { background: var(--gold); color: var(--navy); padding: 8px 10px; border-radius: 4px;
+                    display: none; margin: 8px 0; font-size: 13px; font-weight: 700; }
+  .leaflet-container { background: #0C2140; }
+
+  #tab-board { height: 100%; }
+  #boardFrame { width: 100%; height: 100%; border: 0; display: block; }
+
+  .view { display: none; }
+  .view.on { display: block; }
+  #view-event, .etab { display: none; height: 100%; }
+  #view-event.on { display: block; }
+  .etab.on { display: block; }
+  .etab.flexon { display: flex; }
 
   /* login gate */
   #login { position: fixed; inset: 0; background: var(--blue); display: flex; align-items: center;
@@ -53,10 +98,7 @@
   #login .card { width: 340px; background: var(--navy); padding: 32px; border-radius: 8px;
                  border-top: 4px solid var(--gold); }
   #login .wordmark { font-size: 30px; }
-  #login small { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.2em;
-                 text-transform: uppercase; color: rgba(244,243,239,0.5); display: block; margin: 4px 0 20px; }
   #loginErr { color: var(--orange); font-size: 13px; min-height: 18px; margin-top: 8px; }
-  .leaflet-container { background: #0C2140; }
 </style>
 </head>
 <body>
@@ -64,134 +106,556 @@
 <div id="login">
   <div class="card">
     <div class="wordmark">RUN<span class="slash">/</span>HACK</div>
-    <small>Race control · Admin</small>
-    <input type="password" id="adminKey" placeholder="admin password" onkeydown="if(event.key==='Enter')login()">
+    <small class="muted" style="font-family:'Geist Mono',monospace;letter-spacing:0.2em;text-transform:uppercase">Race control · Admin</small>
+    <input type="password" id="adminKey" placeholder="admin password" onkeydown="if(event.key==='Enter')login()" style="margin-top:16px">
     <button class="primary" style="width:100%;margin-top:12px" onclick="login()">Sign in →</button>
     <div id="loginErr"></div>
   </div>
 </div>
 
-<div id="side">
-  <div class="brand">
-    <div class="wordmark">RUN<span class="slash">/</span>HACK</div>
-    <small>Race control</small>
-  </div>
-  <div class="pad">
-
-  <h2>Event</h2>
-  <select id="eventSelect" onchange="loadEvent(this.value)"></select>
-  <input type="text" id="evSlug" placeholder="slug (e.g. london)">
-  <input type="text" id="evName" placeholder="name (e.g. RUN/HACK London)">
-  <div class="grid2">
-    <label class="muted">lap metres <input type="number" id="cfgLapM" value="400"></label>
-    <label class="muted">max accuracy m <input type="number" id="cfgAcc" value="40"></label>
-    <label class="muted">min lap s <input type="number" id="cfgMin" value="55"></label>
-    <label class="muted">max lap s <input type="number" id="cfgMax" value="168"></label>
-    <label class="muted">entry fixes <input type="number" id="cfgEntry" value="1"></label>
-    <label class="muted">exit fixes <input type="number" id="cfgExit" value="2"></label>
-    <label class="muted">starts <input type="datetime-local" id="evStart"></label>
-    <label class="muted">ends <input type="datetime-local" id="evEnd"></label>
-    <label class="muted">score formula
-      <select id="cfgFormula">
-        <option value="km_x_commits">km × commits</option>
-        <option value="km_plus_commits">km + commits × weight</option>
-      </select></label>
-    <label class="muted">commit weight <input type="number" id="cfgWeight" value="0.1" step="0.05"></label>
-  </div>
-  <p class="muted">Laps outside start–end are recorded but invalid. Commits count from start.
-    Dev tip: for a walkable test event set min lap ~10 and max lap ~1200.</p>
-
-  <h2>Race</h2>
-  <div class="team-row">
-    <span id="raceStatus" class="muted" style="flex:1">—</span>
-    <button onclick="control('start_now')">▶ Start now</button>
-    <button id="pauseBtn" onclick="control('pause')">⏸ Pause</button>
-    <button onclick="control('end_now')">■ End now</button>
-  </div>
-  <div class="team-row">
-    <button onclick="resetRace()" style="border-color:#DD6A24;color:#DD6A24">⚠ Reset race data</button>
-    <span class="muted" style="flex:1">wipes laps + runners, keeps event/teams/repos</span>
-  </div>
-  <div class="team-row">
-    <button onclick="deleteEvent()" style="border-color:#DD6A24;color:#DD6A24">⚠ Delete event</button>
-    <span class="muted" style="flex:1">removes this event and everything under it</span>
-  </div>
-
-  <h2>Zones <span style="color:rgba(244,243,239,0.4)">(lap order · zone 0 = start/finish)</span></h2>
-  <div id="drawing-banner">Click map corners, then Finish zone.</div>
-  <div id="zoneList"></div>
-  <button onclick="startZone()">+ Draw zone</button>
-  <button id="finishZoneBtn" class="primary" onclick="finishZone()" style="display:none">Finish zone</button>
-  <br><br>
-  <button class="primary" onclick="saveEvent()">Save event</button>
-  <span id="saveMsg" class="muted"></span>
-
-  <h2>Teams</h2>
-  <div id="teamList"></div>
-  <input type="text" id="teamName" placeholder="team name">
-  <button onclick="addTeam()">Add team</button>
-
-  <h2>Runners <span style="color:rgba(244,243,239,0.4)">(live connections)</span></h2>
-  <div id="rosterList" class="muted">—</div>
-  <button onclick="loadRoster()">↻ Refresh</button>
-
-  <h2>Simulator</h2>
-  <p class="muted">Fake runner looping the drawn zones from this tab — registers a real member and
-    posts to /ingest, exercising the whole pipeline.</p>
-  <select id="simTeam"></select>
-  <input type="text" id="simName" placeholder="sim runner name" value="Sim Runner">
-  <div class="grid2">
-    <label class="muted">lap seconds <input type="number" id="simLapS" value="120"></label>
-    <label class="muted">fix interval s <input type="number" id="simInterval" value="2"></label>
-    <label class="muted">gps noise m <input type="number" id="simNoise" value="6"></label>
-    <label class="muted">accuracy m <input type="number" id="simAcc" value="10"></label>
-  </div>
-  <button onclick="startSim()">▶ Start sim runner</button>
-  <div id="simList"></div>
-
-  <h2>Links</h2>
-  <div id="links" class="muted">Save an event first.</div>
-
+<div class="topbar">
+  <div class="wordmark">RUN<span class="slash">/</span>HACK<small>Race control</small></div>
+  <div class="crumb" id="crumb"><a onclick="go('')">All events</a></div>
+  <span class="statuschip" id="statusChip" style="display:none"></span>
+  <div class="tabs" id="tabs" style="display:none">
+    <button data-tab="setup" onclick="go(cur.slug, 'setup')">Setup</button>
+    <button data-tab="teams" onclick="go(cur.slug, 'teams')">Teams</button>
+    <button data-tab="runners" onclick="go(cur.slug, 'runners')">Runners</button>
+    <button data-tab="board" onclick="go(cur.slug, 'board')">Leaderboard</button>
+    <button data-tab="map" onclick="go(cur.slug, 'map')">Map</button>
   </div>
 </div>
-<div id="map"></div>
+
+<main>
+  <!-- ============ ALL EVENTS ============ -->
+  <div class="view" id="view-events">
+    <div class="wrap">
+      <h2>Events</h2>
+      <div id="eventList"></div>
+      <h2>New event</h2>
+      <div class="card">
+        <div class="grid2">
+          <input type="text" id="newSlug" placeholder="slug (e.g. london)">
+          <input type="text" id="newName" placeholder="name (e.g. RUN/HACK London)">
+        </div>
+        <button class="primary" onclick="createEvent()">Create event →</button>
+        <span class="muted">then draw its zones in the Map tab</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SINGLE EVENT ============ -->
+  <div id="view-event">
+
+    <div class="etab" id="tab-setup">
+      <div class="wrap">
+        <h2>Race</h2>
+        <div class="card">
+          <div class="row">
+            <span id="raceStatus" class="muted" style="flex:1">—</span>
+            <button onclick="control('start_now')">▶ Start now</button>
+            <button id="pauseBtn">⏸ Pause</button>
+            <button onclick="control('end_now')">■ End now</button>
+          </div>
+          <div class="grid2" style="margin-top:8px">
+            <label class="muted">starts <input type="datetime-local" id="evStart"></label>
+            <label class="muted">ends <input type="datetime-local" id="evEnd"></label>
+          </div>
+        </div>
+
+        <h2>Event</h2>
+        <div class="card">
+          <div class="grid2">
+            <label class="muted">slug <input type="text" id="evSlug" disabled></label>
+            <label class="muted">name <input type="text" id="evName"></label>
+          </div>
+          <div class="grid3" style="margin-top:6px">
+            <label class="muted">lap metres <input type="number" id="cfgLapM" value="400"></label>
+            <label class="muted">min lap s <input type="number" id="cfgMin" value="55"></label>
+            <label class="muted">max lap s <input type="number" id="cfgMax" value="168"></label>
+            <label class="muted">max accuracy m <input type="number" id="cfgAcc" value="40"></label>
+            <label class="muted">entry fixes <input type="number" id="cfgEntry" value="1"></label>
+            <label class="muted">exit fixes <input type="number" id="cfgExit" value="2"></label>
+            <label class="muted">score formula
+              <select id="cfgFormula">
+                <option value="km_x_commits">km × commits</option>
+                <option value="km_plus_commits">km + commits × weight</option>
+              </select></label>
+            <label class="muted">commit weight <input type="number" id="cfgWeight" value="0.1" step="0.05"></label>
+          </div>
+          <p class="muted">Laps outside start–end are recorded but invalid. Commits count from start.
+            Walkable test event: min lap ~10, max lap ~1200.</p>
+          <button class="primary" onclick="saveEvent()">Save event</button>
+          <span id="saveMsg" class="muted"></span>
+        </div>
+
+        <h2>Links</h2>
+        <div class="card" id="links"></div>
+
+        <h2>Danger zone</h2>
+        <div class="card">
+          <div class="row">
+            <button class="danger" onclick="resetRace()">⚠ Reset race data</button>
+            <span class="muted" style="flex:1">wipes laps + runners, keeps event/teams/repos</span>
+          </div>
+          <div class="row">
+            <button class="danger" onclick="deleteEvent()">⚠ Delete event</button>
+            <span class="muted" style="flex:1">removes this event and everything under it</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="etab" id="tab-teams">
+      <div class="wrap">
+        <h2>Teams</h2>
+        <div id="teamList"></div>
+        <div class="card">
+          <div class="row">
+            <input type="text" id="teamName" placeholder="team name" style="flex:1"
+                   onkeydown="if(event.key==='Enter')addTeam()">
+            <button class="primary" onclick="addTeam()">Add team</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="etab" id="tab-runners">
+      <div class="wrap">
+        <h2>Runners <span style="color:rgba(244,243,239,0.4)">(auto-refreshes)</span></h2>
+        <div id="rosterList" class="muted">—</div>
+      </div>
+    </div>
+
+    <div class="etab" id="tab-board"><iframe id="boardFrame"></iframe></div>
+
+    <div class="etab" id="tab-map">
+      <div id="mapside">
+        <h2>Zones <span style="color:rgba(244,243,239,0.4)">(lap order · 0 = start/finish)</span></h2>
+        <div id="drawing-banner">Click map corners, then Finish zone.</div>
+        <div id="zoneList"></div>
+        <div class="row">
+          <button onclick="startZone()">+ Draw zone</button>
+          <button id="finishZoneBtn" class="primary" onclick="finishZone()" style="display:none">Finish zone</button>
+        </div>
+        <button class="primary" onclick="saveZones()" style="margin-top:10px">Save zones</button>
+        <span id="zoneMsg" class="muted"></span>
+
+        <h2>Simulator</h2>
+        <p class="muted">Fake runner looping the drawn zones — registers a real member and posts to /ingest.</p>
+        <select id="simTeam"></select>
+        <input type="text" id="simName" placeholder="sim runner name" value="Sim Runner">
+        <div class="grid2">
+          <label class="muted">lap seconds <input type="number" id="simLapS" value="120"></label>
+          <label class="muted">fix interval s <input type="number" id="simInterval" value="2"></label>
+          <label class="muted">gps noise m <input type="number" id="simNoise" value="6"></label>
+          <label class="muted">accuracy m <input type="number" id="simAcc" value="10"></label>
+        </div>
+        <button onclick="startSim()">▶ Start sim runner</button>
+        <div id="simList"></div>
+      </div>
+      <div id="map"></div>
+    </div>
+
+  </div>
+</main>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 let key = localStorage.getItem('adminKey') || '';
 const H = () => ({ 'Content-Type': 'application/json', Authorization: 'Bearer ' + key });
+let cur = null;        // current event (from GET /api/admin/events/:slug, includes teams)
+let curTab = 'setup';
 
+/* ---------- auth ---------- */
 async function login() {
   key = document.getElementById('adminKey').value.trim();
   const r = await fetch('/api/admin/events', { headers: H() });
-  if (!r.ok) {
-    document.getElementById('loginErr').textContent = 'Wrong password.';
-    return;
-  }
+  if (!r.ok) { document.getElementById('loginErr').textContent = 'Wrong password.'; return; }
   localStorage.setItem('adminKey', key);
   document.getElementById('login').style.display = 'none';
-  renderEventList(await r.json());
+  route();
 }
 async function boot() {
-  if (!key) return; // show login
-  const r = await fetch('/api/admin/events', { headers: H() });
-  if (!r.ok) { localStorage.removeItem('adminKey'); key = ''; return; }
-  document.getElementById('login').style.display = 'none';
-  renderEventList(await r.json());
+  if (key) {
+    const r = await fetch('/api/admin/events', { headers: H() });
+    if (r.ok) { document.getElementById('login').style.display = 'none'; route(); return; }
+    localStorage.removeItem('adminKey'); key = '';
+  }
 }
 
-// London Marathon Community Track
-const map = L.map('map').setView([51.5385, -0.0166], 17);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 20, attribution: '&copy; OpenStreetMap',
-}).addTo(map);
+/* ---------- routing: #/  or  #/e/{slug}/{tab} ---------- */
+function go(slug, tab = 'setup') { location.hash = slug ? `#/e/${slug}/${tab}` : '#/'; }
+window.addEventListener('hashchange', route);
+async function route() {
+  const m = location.hash.match(/^#\/e\/([a-z0-9-]+)(?:\/(\w+))?/);
+  if (!m) return showEvents();
+  await openEvent(m[1], m[2] || 'setup');
+}
 
-let zones = [];          // [{name, polygon: [[lat,lng],...]}]
-let zoneLayers = [];
-let drawing = null;      // {points, markers, line}
+/* ---------- all-events view ---------- */
+function statusOf(e, now = Date.now()) {
+  const start = e.start_at ? new Date(e.start_at).getTime() : null;
+  const end = e.end_at ? new Date(e.end_at).getTime() : null;
+  if (end && now > end) return 'finished';
+  if (start && now < start) return 'upcoming';
+  if (e.paused_at) return 'paused';
+  if (!start && !end) return 'draft'; // no schedule yet — start manually or set times
+  return 'live';
+}
+const statusColour = {
+  live: 'var(--ok)', paused: 'var(--gold)', upcoming: 'var(--sky)',
+  finished: 'var(--orange)', draft: 'rgba(244,243,239,0.5)',
+};
+function rel(iso) {
+  const d = new Date(iso).getTime() - Date.now();
+  const abs = Math.abs(d);
+  const u = abs > 86400e3 ? [86400e3, 'd'] : abs > 3600e3 ? [3600e3, 'h'] : [60e3, 'm'];
+  const n = Math.max(1, Math.round(abs / u[0]));
+  return d > 0 ? `in ${n}${u[1]}` : `${n}${u[1]} ago`;
+}
+async function showEvents() {
+  cur = null;
+  setChrome();
+  const r = await fetch('/api/admin/events', { headers: H() });
+  if (!r.ok) return;
+  const events = await r.json();
+  const groups = { live: [], paused: [], upcoming: [], draft: [], finished: [] };
+  events.forEach((e) => groups[statusOf(e)].push(e));
+  const order = [
+    ['live', 'Live now'], ['paused', 'Paused'], ['upcoming', 'Scheduled'],
+    ['draft', 'Drafts'], ['finished', 'Finished'],
+  ];
+  const card = (e, s) => {
+    const when =
+      s === 'upcoming' ? `starts ${rel(e.start_at)} · ${new Date(e.start_at).toLocaleString()}` :
+      s === 'live' || s === 'paused' ? (e.end_at ? `ends ${rel(e.end_at)}` : 'no end time set') :
+      s === 'finished' ? `ended ${rel(e.end_at)}` : 'no schedule — start manually or set times inside';
+    const quickStart = (s === 'upcoming' || s === 'draft')
+      ? `<button class="primary" onclick="event.stopPropagation();quickStart('${e.slug}')">▶ Start now</button>` : '';
+    return `<div class="card eventcard" onclick="go('${e.slug}')">
+      <div style="flex:1"><div class="name">${e.name}</div>
+        <div class="meta">/${e.slug} · ${when}</div></div>
+      ${quickStart}
+      <span class="statuschip" style="color:${statusColour[s]};border-color:${statusColour[s]}">${s}</span>
+    </div>`;
+  };
+  document.getElementById('eventList').innerHTML = order
+    .filter(([k]) => groups[k].length)
+    .map(([k, title]) => `<h2>${title}</h2>` + groups[k].map((e) => card(e, k)).join(''))
+    .join('') || '<div class="muted">No events yet — create one below.</div>';
+  show('view-events');
+}
+async function quickStart(slug) {
+  if (!confirm(`Start "${slug}" right now? This sets the start time to now.`)) return;
+  await fetch(`/api/admin/events/${slug}/control`, {
+    method: 'POST', headers: H(), body: JSON.stringify({ action: 'start_now' }),
+  });
+  showEvents();
+}
+async function createEvent() {
+  const slug = document.getElementById('newSlug').value.trim();
+  const name = document.getElementById('newName').value.trim();
+  if (!slug || !name) return alert('slug and name required');
+  const r = await fetch('/api/admin/events', {
+    method: 'POST', headers: H(), body: JSON.stringify({ slug, name }),
+  });
+  if (!r.ok) return alert('failed: ' + (await r.text()));
+  document.getElementById('newSlug').value = ''; document.getElementById('newName').value = '';
+  go(slug, 'map'); // first job on a new event: draw its zones
+}
 
+/* ---------- single-event view ---------- */
+async function openEvent(slug, tab) {
+  const r = await fetch('/api/admin/events/' + slug, { headers: H() });
+  if (!r.ok) return showEvents();
+  cur = await r.json();
+  curTab = tab;
+  zones = cur.zones || [];
+  setChrome();
+  show('view-event');
+  document.querySelectorAll('.etab').forEach((el) => el.classList.remove('on', 'flexon'));
+  const el = document.getElementById('tab-' + tab);
+  el.classList.add(tab === 'map' ? 'flexon' : 'on');
+  if (tab === 'setup') renderSetup();
+  if (tab === 'teams') renderTeams();
+  if (tab === 'runners') loadRoster();
+  if (tab === 'board') {
+    const f = document.getElementById('boardFrame');
+    if (!f.src.endsWith(`/${cur.slug}/board`)) f.src = `/${cur.slug}/board`;
+  }
+  if (tab === 'map') openMap();
+}
+function setChrome() {
+  const inEvent = !!cur;
+  document.getElementById('tabs').style.display = inEvent ? 'flex' : 'none';
+  const chip = document.getElementById('statusChip');
+  if (inEvent) {
+    const s = statusOf(cur);
+    chip.style.display = ''; chip.textContent = s;
+    chip.style.color = chip.style.borderColor = statusColour[s];
+    document.getElementById('crumb').innerHTML =
+      `<a onclick="go('')">All events</a> <span class="muted">/</span> <b>${cur.name}</b>`;
+    document.querySelectorAll('.tabs button').forEach((b) =>
+      b.classList.toggle('on', b.dataset.tab === curTab));
+  } else {
+    chip.style.display = 'none';
+    document.getElementById('crumb').innerHTML = `<a onclick="go('')">All events</a>`;
+  }
+}
+function show(id) {
+  document.getElementById('view-events').classList.toggle('on', id === 'view-events');
+  document.getElementById('view-event').classList.toggle('on', id === 'view-event');
+}
+
+/* ---------- setup tab ---------- */
+function toLocalInput(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+function renderSetup() {
+  const c = cur.config || {};
+  evSlug.value = cur.slug; evName.value = cur.name;
+  cfgLapM.value = c.lapM ?? 400; cfgAcc.value = c.maxAccuracyM ?? 40;
+  cfgMin.value = c.minLapS ?? 55; cfgMax.value = c.maxLapS ?? 168;
+  cfgEntry.value = c.entryFixes ?? 1; cfgExit.value = c.exitFixes ?? 2;
+  cfgFormula.value = c.scoreFormula ?? 'km_x_commits'; cfgWeight.value = c.commitWeight ?? 0.1;
+  evStart.value = toLocalInput(cur.start_at); evEnd.value = toLocalInput(cur.end_at);
+  document.getElementById('raceStatus').innerHTML =
+    `status: <b style="color:${statusColour[statusOf(cur)]}">${statusOf(cur)}</b>`;
+  const pb = document.getElementById('pauseBtn');
+  pb.textContent = cur.paused_at ? '▶ Resume' : '⏸ Pause';
+  pb.onclick = () => control(cur.paused_at ? 'resume' : 'pause');
+  document.getElementById('links').innerHTML = `
+    <span class="muted">Join (generic — team QRs are on each team page):</span>
+    <div class="url">${location.origin}/${cur.slug}/join</div>
+    <span class="muted">Venue board:</span> <div class="url">${location.origin}/${cur.slug}/board</div>
+    <span class="muted">Public API:</span> <div class="url">${location.origin}/api/${cur.slug}/board</div>`;
+}
+async function saveEvent() {
+  const body = {
+    slug: cur.slug,
+    name: evName.value.trim(),
+    zones,
+    startAt: evStart.value ? new Date(evStart.value).toISOString() : null,
+    endAt: evEnd.value ? new Date(evEnd.value).toISOString() : null,
+    config: {
+      lapM: +cfgLapM.value, maxAccuracyM: +cfgAcc.value,
+      minLapS: +cfgMin.value, maxLapS: +cfgMax.value,
+      entryFixes: +cfgEntry.value, exitFixes: +cfgExit.value,
+      scoreFormula: cfgFormula.value, commitWeight: +cfgWeight.value,
+    },
+  };
+  const r = await fetch('/api/admin/events', { method: 'POST', headers: H(), body: JSON.stringify(body) });
+  document.getElementById('saveMsg').textContent = r.ok ? 'saved ✓' : 'failed: ' + (await r.text());
+  if (r.ok) openEvent(cur.slug, curTab);
+}
+async function control(action) {
+  if (action === 'end_now' && !confirm('End the race now?')) return;
+  const r = await fetch(`/api/admin/events/${cur.slug}/control`, {
+    method: 'POST', headers: H(), body: JSON.stringify({ action }),
+  });
+  if (r.ok) openEvent(cur.slug, curTab);
+}
+async function resetRace() {
+  if (!confirm(`Wipe ALL laps and runners for "${cur.slug}"? Teams and config survive.`)) return;
+  await fetch(`/api/admin/events/${cur.slug}/reset`, { method: 'POST', headers: H() });
+  openEvent(cur.slug, curTab);
+}
+async function deleteEvent() {
+  if (prompt(`Delete event "${cur.slug}" and ALL its teams, runners and laps?\nType the slug to confirm:`) !== cur.slug) return;
+  await fetch(`/api/admin/events/${cur.slug}`, { method: 'DELETE', headers: H() });
+  go('');
+}
+
+/* ---------- teams tab ---------- */
+function copyText(text, btn) {
+  navigator.clipboard?.writeText(text).then(
+    () => { if (btn) { const o = btn.textContent; btn.textContent = '✓'; setTimeout(() => (btn.textContent = o), 900); } },
+    () => prompt('Copy:', text)
+  ) || prompt('Copy:', text);
+}
+function renderTeams() {
+  const teams = cur.teams || [];
+  document.getElementById('teamList').innerHTML = teams.map((t) => {
+    const commits = t.commit_override ?? t.commit_count ?? 0;
+    const ovr = t.commit_override != null ? ` <span style="color:var(--gold)">(override)</span>` : '';
+    const adj = Number(t.score_adjust) ? ` · adj ${t.score_adjust > 0 ? '+' : ''}${t.score_adjust}` : '';
+    return `<div class="card">
+      <div class="row"><span style="flex:1"><b style="font-size:15px">${t.name}</b>
+        <span class="muted">#${t.id} · ${t.member_count} joins · ${commits} commits${ovr}${adj}</span></span>
+        <a href="/${cur.slug}/team/${t.id}" target="_blank"><button title="team page + QR">QR page</button></a>
+        <button onclick="addLap(${t.id})">+lap</button>
+        <button onclick="toggleLaps(${t.id})">laps</button>
+        <button onclick="renameTeam(${t.id})">rename</button>
+        <button onclick="delTeam(${t.id})">✕</button></div>
+      <div class="row"><input type="text" placeholder="github repo url" value="${t.repo_url || ''}"
+        onchange="patchTeam(${t.id}, { repoUrl: this.value })" style="flex:1;font-size:12px"></div>
+      <div class="row" style="font-size:12px">
+        <span class="muted">links:</span>
+        <button onclick="copyText('${location.origin}/${cur.slug}/join?team=${t.id}', this)">copy join link</button>
+        <button onclick="copyText('${location.origin}/${cur.slug}/team/${t.id}', this)">copy team page</button>
+        <button onclick="copyText('${t.id}', this)">copy id</button>
+        <span class="muted" style="margin-left:10px">score:</span>
+        <button onclick="overrideCommits(${t.id})" title="manual commit count; blank = back to GitHub auto">override commits</button>
+        <button onclick="adjustScore(${t.id})" title="flat bonus/penalty on the score">adjust score</button>
+      </div>
+      <div id="laps-${t.id}" style="display:none;margin-top:6px;padding-left:10px;border-left:2px solid var(--line)"></div>
+    </div>`;
+  }).join('') || '<div class="muted">No teams yet.</div>';
+}
+async function patchTeam(teamId, body) {
+  const r = await fetch(`/api/admin/events/${cur.slug}/teams/${teamId}`, {
+    method: 'PATCH', headers: H(), body: JSON.stringify(body),
+  });
+  if (!r.ok) alert('failed: ' + (await r.text()));
+  openEvent(cur.slug, curTab);
+}
+function renameTeam(teamId) {
+  const t = cur.teams.find((x) => x.id === teamId);
+  const name = prompt('New team name:', t?.name || '');
+  if (name?.trim()) patchTeam(teamId, { name });
+}
+function overrideCommits(teamId) {
+  const t = cur.teams.find((x) => x.id === teamId);
+  const v = prompt('Manual commit count (leave blank to return to GitHub auto-count):', t?.commit_override ?? '');
+  if (v === null) return;
+  patchTeam(teamId, { commitOverride: v.trim() === '' ? null : +v });
+}
+function adjustScore(teamId) {
+  const t = cur.teams.find((x) => x.id === teamId);
+  const v = prompt('Score adjustment (+bonus / -penalty):', t?.score_adjust ?? 0);
+  if (v === null) return;
+  patchTeam(teamId, { scoreAdjust: +v });
+}
+async function addTeam() {
+  const name = document.getElementById('teamName').value.trim();
+  if (!name) return;
+  await fetch(`/api/admin/events/${cur.slug}/teams`, {
+    method: 'POST', headers: H(), body: JSON.stringify({ name }),
+  });
+  document.getElementById('teamName').value = '';
+  openEvent(cur.slug, curTab);
+}
+async function delTeam(id) {
+  const t = cur.teams.find((x) => x.id === id);
+  if (!confirm(`Delete team "${t?.name}" and its runners/laps?`)) return;
+  await fetch(`/api/admin/events/${cur.slug}/teams/${id}`, { method: 'DELETE', headers: H() });
+  openEvent(cur.slug, curTab);
+}
+async function addLap(teamId) {
+  const count = prompt('How many laps to credit?', '1');
+  if (count === null) return;
+  const seconds = prompt('Lap time in seconds (for the board’s last-lap display):', '120');
+  if (seconds === null) return;
+  await fetch(`/api/admin/events/${cur.slug}/teams/${teamId}/laps`, {
+    method: 'POST', headers: H(), body: JSON.stringify({ count: +count, seconds: +seconds }),
+  });
+  openEvent(cur.slug, curTab);
+}
+async function toggleLaps(teamId) {
+  const panel = document.getElementById(`laps-${teamId}`);
+  if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  const laps = await (await fetch(`/api/admin/events/${cur.slug}/teams/${teamId}/laps`, { headers: H() })).json();
+  panel.innerHTML = laps.map((l) =>
+    `<div class="row" style="font-size:12px">
+       <span style="flex:1">${new Date(l.finished_at).toLocaleTimeString()} · ${Math.round(l.seconds)}s
+         · ${l.runner || 'manual'}${l.manual ? ' (manual)' : ''}
+         <span style="color:${l.counted ? 'var(--ok)' : 'var(--orange)'}">${l.counted ? '✓ valid' : '✕ ' + (l.reject_reason || 'invalid')}</span></span>
+       <button onclick="flipLap(${l.id}, ${!l.counted}, ${teamId})">${l.counted ? 'invalidate' : 'make valid'}</button>
+     </div>`).join('') || '<span class="muted">no laps yet</span>';
+}
+async function flipLap(lapId, counted, teamId) {
+  await fetch(`/api/admin/laps/${lapId}`, { method: 'PATCH', headers: H(), body: JSON.stringify({ counted }) });
+  const panel = document.getElementById(`laps-${teamId}`);
+  panel.style.display = 'none';
+  toggleLaps(teamId);
+}
+
+/* ---------- runners tab ---------- */
+async function loadRoster() {
+  if (!cur) return;
+  const roster = await (await fetch(`/api/admin/events/${cur.slug}/members`, { headers: H() })).json();
+  document.getElementById('rosterList').innerHTML = roster.map((m) => {
+    const ping = m.lastPingAgoS == null ? 'never pinged'
+      : m.lastPingAgoS <= 15 ? `<span style="color:var(--ok)">ping ${m.lastPingAgoS}s</span>`
+      : `ping ${m.lastPingAgoS}s`;
+    const state = m.frozen_at ? 'frozen' : m.is_active ? '<b style="color:var(--ok)">active</b>' : m.activated_at ? 'was active' : 'joined';
+    const traccar = `org.traccar.client://config?url=${encodeURIComponent(location.origin + '/ingest/' + m.user_id)}&id=${m.user_id}&accuracy=highest&interval=2&distance=0`;
+    return `<div class="card"><div class="row" style="font-size:12px">
+      <span style="flex:1;min-width:200px">${m.team} · <b>${m.name}</b> <span class="muted">#${m.id}</span> · ${state} · ${m.lap_count} laps · ${ping}</span>
+      <button onclick="copyText('${traccar}', this)" title="copy the Traccar config link — open on the runner's phone to (re)connect">cfg</button>
+      <button onclick="renameMember(${m.id}, '${m.name.replace(/'/g, "\\'")}')">rename</button>
+      <button onclick="moveMember(${m.id})" title="move to another team (laps go too)">move</button>
+      ${m.is_active && !m.frozen_at ? '' : `<button onclick="activateMember(${m.id})" title="make this the team's live runner">activate</button>`}
+      ${m.frozen_at
+        ? `<button onclick="unfreezeMember(${m.id})">unfreeze</button>`
+        : `<button onclick="freezeMember(${m.id})" title="force-stop tracking">freeze</button>`}
+      <button onclick="resetMemberState(${m.id})" title="clear a stuck lap state machine">reset</button>
+      <button onclick="deleteMember(${m.id}, '${m.name.replace(/'/g, "\\'")}')" title="remove a mis-join (team keeps laps)">✕</button>
+    </div></div>`;
+  }).join('') || '<span class="muted">Nobody yet.</span>';
+}
+async function memberAction(id, action, method = 'POST', body) {
+  const r = await fetch(`/api/admin/members/${id}${action}`, {
+    method, headers: H(), body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) alert('failed: ' + (await r.text()));
+  loadRoster();
+}
+const freezeMember = (id) => memberAction(id, '/freeze');
+const unfreezeMember = (id) => memberAction(id, '/unfreeze');
+const resetMemberState = (id) => memberAction(id, '/reset-state');
+function activateMember(id) {
+  if (confirm("Make this member the team's live runner? The current one gets frozen."))
+    memberAction(id, '/activate');
+}
+function renameMember(id, current) {
+  const name = prompt('New runner name:', current);
+  if (name?.trim()) memberAction(id, '', 'PATCH', { name });
+}
+function moveMember(id) {
+  const list = (cur.teams || []).map((t) => `${t.id} = ${t.name}`).join('\n');
+  const v = prompt(`Move to which team? Enter a team id:\n${list}`);
+  if (v === null || !v.trim()) return;
+  memberAction(id, '', 'PATCH', { teamId: +v, moveLaps: true });
+}
+function deleteMember(id, name) {
+  if (confirm(`Remove "${name}"? Their laps stay with the team, unattributed.`))
+    memberAction(id, '', 'DELETE');
+}
+setInterval(() => {
+  if (cur && curTab === 'runners' && !document.hidden) loadRoster();
+}, 5000);
+
+/* ---------- map tab (lazy) ---------- */
+let map = null, zones = [], zoneLayers = [], drawing = null;
 function colour(i) { return i === 0 ? '#DD6A24' : '#3A90E6'; }
-
+function ensureMap() {
+  if (map) return;
+  map = L.map('map').setView([51.5385, -0.0166], 17); // London Marathon Community Track
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 20, attribution: '&copy; OpenStreetMap',
+  }).addTo(map);
+  map.on('click', (e) => {
+    if (!drawing) return;
+    drawing.points.push([e.latlng.lat, e.latlng.lng]);
+    drawing.markers.push(L.circleMarker(e.latlng, { radius: 4 }).addTo(map));
+    if (drawing.line) map.removeLayer(drawing.line);
+    drawing.line = L.polyline(drawing.points, { dashArray: '4' }).addTo(map);
+  });
+}
+function openMap() {
+  ensureMap();
+  setTimeout(() => map.invalidateSize(), 50);
+  redrawZones();
+  if (zones[0]?.polygon?.[0]) map.setView(zones[0].polygon[0], 17);
+  document.getElementById('simTeam').innerHTML =
+    (cur.teams || []).map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
+}
 function redrawZones() {
   zoneLayers.forEach((l) => map.removeLayer(l));
   zoneLayers = zones.map((z, i) =>
@@ -199,8 +663,7 @@ function redrawZones() {
       .bindTooltip(`${i}: ${z.name}`, { permanent: true, direction: 'center' })
       .addTo(map)
   );
-  const list = document.getElementById('zoneList');
-  list.innerHTML = '';
+  document.getElementById('zoneList').innerHTML = '';
   zones.forEach((z, i) => {
     const row = document.createElement('div');
     row.className = 'zone-row';
@@ -209,7 +672,7 @@ function redrawZones() {
       <button onclick="moveZone(${i},-1)">↑</button>
       <button onclick="moveZone(${i},1)">↓</button>
       <button onclick="zones.splice(${i},1);redrawZones()">✕</button>`;
-    list.appendChild(row);
+    document.getElementById('zoneList').appendChild(row);
   });
 }
 function moveZone(i, d) {
@@ -223,13 +686,6 @@ function startZone() {
   document.getElementById('drawing-banner').style.display = 'block';
   document.getElementById('finishZoneBtn').style.display = 'inline-block';
 }
-map.on('click', (e) => {
-  if (!drawing) return;
-  drawing.points.push([e.latlng.lat, e.latlng.lng]);
-  drawing.markers.push(L.circleMarker(e.latlng, { radius: 4 }).addTo(map));
-  if (drawing.line) map.removeLayer(drawing.line);
-  drawing.line = L.polyline(drawing.points, { dashArray: '4' }).addTo(map);
-});
 function finishZone() {
   if (drawing && drawing.points.length >= 3) {
     zones.push({
@@ -246,276 +702,18 @@ function finishZone() {
   document.getElementById('finishZoneBtn').style.display = 'none';
   redrawZones();
 }
-
-function renderEventList(events) {
-  const sel = document.getElementById('eventSelect');
-  sel.innerHTML = '<option value="">— new event —</option>' +
-    events.map((e) => `<option value="${e.slug}">${e.name}</option>`).join('');
-}
-async function loadEvents() {
-  const r = await fetch('/api/admin/events', { headers: H() });
-  if (r.ok) renderEventList(await r.json());
-}
-async function loadEvent(slug) {
-  if (!slug) { zones = []; redrawZones(); renderTeams([]); return; }
-  const r = await fetch('/api/admin/events/' + slug, { headers: H() });
-  const e = await r.json();
-  document.getElementById('evSlug').value = e.slug;
-  document.getElementById('evName').value = e.name;
-  const c = e.config || {};
-  cfgLapM.value = c.lapM ?? 400; cfgAcc.value = c.maxAccuracyM ?? 40;
-  cfgMin.value = c.minLapS ?? 55; cfgMax.value = c.maxLapS ?? 168;
-  cfgEntry.value = c.entryFixes ?? 1; cfgExit.value = c.exitFixes ?? 2;
-  cfgFormula.value = c.scoreFormula ?? 'km_x_commits'; cfgWeight.value = c.commitWeight ?? 0.1;
-  evStart.value = toLocalInput(e.start_at); evEnd.value = toLocalInput(e.end_at);
-  zones = e.zones || [];
-  redrawZones();
-  if (zones[0]?.polygon?.[0]) map.setView(zones[0].polygon[0], 17);
-  renderTeams(e.teams || []);
-  renderRaceStatus(e);
-  renderLinks(e.slug);
-  loadRoster();
-}
-function toLocalInput(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
-}
-async function saveEvent() {
-  const slug = evSlug.value.trim();
+// Zones save with the event's stored fields — no need to visit Setup first.
+async function saveZones() {
   const body = {
-    slug,
-    name: evName.value.trim(),
-    zones,
-    startAt: evStart.value ? new Date(evStart.value).toISOString() : null,
-    endAt: evEnd.value ? new Date(evEnd.value).toISOString() : null,
-    config: {
-      lapM: +cfgLapM.value, maxAccuracyM: +cfgAcc.value,
-      minLapS: +cfgMin.value, maxLapS: +cfgMax.value,
-      entryFixes: +cfgEntry.value, exitFixes: +cfgExit.value,
-      scoreFormula: cfgFormula.value, commitWeight: +cfgWeight.value,
-    },
+    slug: cur.slug, name: cur.name, zones,
+    startAt: cur.start_at, endAt: cur.end_at, config: cur.config || {},
   };
   const r = await fetch('/api/admin/events', { method: 'POST', headers: H(), body: JSON.stringify(body) });
-  document.getElementById('saveMsg').textContent = r.ok ? 'saved ✓' : 'failed: ' + (await r.text());
-  if (r.ok) { await loadEvents(); eventSelect.value = slug; renderLinks(slug); loadEvent(slug); }
-}
-let lastTeams = [];
-function copyText(text, btn) {
-  navigator.clipboard?.writeText(text).then(
-    () => { if (btn) { const o = btn.textContent; btn.textContent = '✓'; setTimeout(() => (btn.textContent = o), 900); } },
-    () => prompt('Copy:', text)
-  ) || prompt('Copy:', text);
-}
-function renderTeams(teams) {
-  lastTeams = teams;
-  const slug = evSlug.value.trim();
-  const el = document.getElementById('teamList');
-  el.innerHTML = teams.map((t) => {
-    const commits = t.commit_override ?? t.commit_count ?? 0;
-    const ovr = t.commit_override != null ? ` <span style="color:#F0BE2A">(override)</span>` : '';
-    const adj = Number(t.score_adjust) ? ` · adj ${t.score_adjust > 0 ? '+' : ''}${t.score_adjust}` : '';
-    return `<div class="team-row"><span style="flex:1"><b>${t.name}</b>
-       <span class="muted">#${t.id} · ${t.member_count} joins · ${commits} commits${ovr}${adj}</span></span>
-     <a href="/${slug}/team/${t.id}" target="_blank"><button title="team page + QR">QR</button></a>
-     <button onclick="addLap(${t.id})" title="manually credit laps">+lap</button>
-     <button onclick="toggleLaps(${t.id})" title="review laps">laps</button>
-     <button onclick="toggleManage(${t.id})" title="rename, overrides, links, ids">⚙</button>
-     <button onclick="delTeam(${t.id})">✕</button></div>
-     <div class="team-row"><input type="text" placeholder="github repo url" value="${t.repo_url || ''}"
-       onchange="setRepo(${t.id}, this.value)" style="flex:1;font-size:12px"></div>
-     <div id="manage-${t.id}" style="display:none;margin:4px 0 10px;padding-left:8px;border-left:2px solid var(--line)"></div>
-     <div id="laps-${t.id}" style="display:none;margin:4px 0 10px;padding-left:8px;border-left:2px solid var(--line)"></div>`;
-  }).join('') || '<div class="muted">none yet</div>';
-  const sim = document.getElementById('simTeam');
-  sim.innerHTML = teams.map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
+  document.getElementById('zoneMsg').textContent = r.ok ? 'saved ✓' : 'failed: ' + (await r.text());
+  if (r.ok) cur.zones = zones;
 }
 
-function toggleManage(teamId) {
-  const panel = document.getElementById(`manage-${teamId}`);
-  if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
-  const t = lastTeams.find((x) => x.id === teamId);
-  const slug = evSlug.value.trim();
-  const join = `${location.origin}/${slug}/join?team=${teamId}`;
-  const page = `${location.origin}/${slug}/team/${teamId}`;
-  panel.style.display = 'block';
-  panel.innerHTML = `
-    <div class="team-row" style="font-size:12px"><span class="muted" style="flex:1">team id: <b>${teamId}</b></span>
-      <button onclick="copyText('${teamId}', this)">copy id</button>
-      <button onclick="copyText('${join}', this)">copy join link</button>
-      <button onclick="copyText('${page}', this)">copy team page</button></div>
-    <div class="team-row" style="font-size:12px">
-      <button onclick="renameTeam(${teamId})">rename</button>
-      <button onclick="overrideCommits(${teamId})" title="manual commit count if GitHub is wrong/down; blank = back to auto">override commits</button>
-      <button onclick="adjustScore(${teamId})" title="flat bonus/penalty added to the score">score adjust</button>
-    </div>`;
-}
-async function patchTeam(teamId, body) {
-  const r = await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${teamId}`, {
-    method: 'PATCH', headers: H(), body: JSON.stringify(body),
-  });
-  if (!r.ok) alert('failed: ' + (await r.text()));
-  loadEvent(evSlug.value.trim());
-}
-function renameTeam(teamId) {
-  const t = lastTeams.find((x) => x.id === teamId);
-  const name = prompt('New team name:', t?.name || '');
-  if (name?.trim()) patchTeam(teamId, { name });
-}
-function overrideCommits(teamId) {
-  const t = lastTeams.find((x) => x.id === teamId);
-  const v = prompt('Manual commit count (leave blank to return to GitHub auto-count):',
-    t?.commit_override ?? '');
-  if (v === null) return;
-  patchTeam(teamId, { commitOverride: v.trim() === '' ? null : +v });
-}
-function adjustScore(teamId) {
-  const t = lastTeams.find((x) => x.id === teamId);
-  const v = prompt('Score adjustment (+bonus / -penalty, added to the computed score):',
-    t?.score_adjust ?? 0);
-  if (v === null) return;
-  patchTeam(teamId, { scoreAdjust: +v });
-}
-
-// ---- Race lifecycle + lap management ----
-async function control(action) {
-  const slug = evSlug.value.trim();
-  if (action === 'end_now' && !confirm('End the race now?')) return;
-  const r = await fetch(`/api/admin/events/${slug}/control`, {
-    method: 'POST', headers: H(), body: JSON.stringify({ action }),
-  });
-  if (r.ok) loadEvent(slug);
-}
-async function resetRace() {
-  const slug = evSlug.value.trim();
-  if (!confirm(`Wipe ALL laps and runners for "${slug}"? Teams and config survive.`)) return;
-  await fetch(`/api/admin/events/${slug}/reset`, { method: 'POST', headers: H() });
-  loadEvent(slug);
-}
-async function deleteEvent() {
-  const slug = evSlug.value.trim();
-  if (prompt(`Delete event "${slug}" and ALL its teams, runners and laps?\nType the slug to confirm:`) !== slug) return;
-  await fetch(`/api/admin/events/${slug}`, { method: 'DELETE', headers: H() });
-  evSlug.value = ''; evName.value = ''; zones = []; redrawZones(); renderTeams([]);
-  await loadEvents();
-}
-function renderRaceStatus(e) {
-  const now = Date.now();
-  const start = e.start_at ? new Date(e.start_at).getTime() : null;
-  const end = e.end_at ? new Date(e.end_at).getTime() : null;
-  let s = 'live';
-  if (start && now < start) s = 'upcoming';
-  else if (end && now > end) s = 'finished';
-  else if (e.paused_at) s = 'paused';
-  document.getElementById('raceStatus').innerHTML =
-    `status: <b style="color:${{ live: '#4ade80', paused: '#F0BE2A', upcoming: '#3A90E6', finished: '#DD6A24' }[s]}">${s}</b>`;
-  const pb = document.getElementById('pauseBtn');
-  pb.textContent = e.paused_at ? '▶ Resume' : '⏸ Pause';
-  pb.onclick = () => control(e.paused_at ? 'resume' : 'pause');
-}
-async function addLap(teamId) {
-  const count = prompt('How many laps to credit?', '1');
-  if (count === null) return;
-  const seconds = prompt('Lap time in seconds (for the board’s last-lap display):', '120');
-  if (seconds === null) return;
-  await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${teamId}/laps`, {
-    method: 'POST', headers: H(), body: JSON.stringify({ count: +count, seconds: +seconds }),
-  });
-  loadEvent(evSlug.value.trim());
-}
-async function toggleLaps(teamId) {
-  const panel = document.getElementById(`laps-${teamId}`);
-  if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
-  panel.style.display = 'block';
-  const laps = await (await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${teamId}/laps`, { headers: H() })).json();
-  panel.innerHTML = laps.map((l) =>
-    `<div class="team-row" style="font-size:12px">
-       <span style="flex:1">${new Date(l.finished_at).toLocaleTimeString()} · ${Math.round(l.seconds)}s
-         · ${l.runner || 'manual'}${l.manual ? ' (manual)' : ''}
-         <span style="color:${l.counted ? '#4ade80' : '#DD6A24'}">${l.counted ? '✓ valid' : '✕ ' + (l.reject_reason || 'invalid')}</span></span>
-       <button onclick="flipLap(${l.id}, ${!l.counted}, ${teamId})">${l.counted ? 'invalidate' : 'make valid'}</button>
-     </div>`).join('') || '<span class="muted">no laps yet</span>';
-}
-async function flipLap(lapId, counted, teamId) {
-  await fetch(`/api/admin/laps/${lapId}`, { method: 'PATCH', headers: H(), body: JSON.stringify({ counted }) });
-  const panel = document.getElementById(`laps-${teamId}`);
-  panel.style.display = 'none';
-  toggleLaps(teamId);
-}
-async function loadRoster() {
-  const slug = evSlug.value.trim();
-  if (!slug) return;
-  const roster = await (await fetch(`/api/admin/events/${slug}/members`, { headers: H() })).json();
-  document.getElementById('rosterList').innerHTML = roster.map((m) => {
-    const ping = m.lastPingAgoS == null ? 'never pinged'
-      : m.lastPingAgoS <= 15 ? `<span style="color:#4ade80">ping ${m.lastPingAgoS}s</span>`
-      : `ping ${m.lastPingAgoS}s`;
-    const state = m.frozen_at ? 'frozen' : m.is_active ? '<b style="color:#4ade80">active</b>' : m.activated_at ? 'was active' : 'joined';
-    const traccar = `org.traccar.client://config?url=${encodeURIComponent(location.origin + '/ingest/' + m.user_id)}&id=${m.user_id}&accuracy=highest&interval=2&distance=0`;
-    return `<div class="team-row" style="font-size:11px;flex-wrap:wrap">
-      <span style="flex:1;min-width:180px">${m.team} · <b>${m.name}</b> <span class="muted">#${m.id}</span> · ${state} · ${m.lap_count} laps · ${ping}</span>
-      <button onclick="copyText('${traccar}', this)" title="copy the Traccar config link — open it on the runner's phone to (re)connect it">cfg</button>
-      <button onclick="renameMember(${m.id}, '${m.name.replace(/'/g, "\\'")}')" title="fix a typo'd name">rename</button>
-      <button onclick="moveMember(${m.id})" title="move to another team (laps go too)">move</button>
-      ${m.is_active && !m.frozen_at ? '' : `<button onclick="activateMember(${m.id})" title="make this the team's live runner">activate</button>`}
-      ${m.frozen_at
-        ? `<button onclick="unfreezeMember(${m.id})" title="undo a freeze">unfreeze</button>`
-        : `<button onclick="freezeMember(${m.id})" title="force-stop this runner's tracking">freeze</button>`}
-      <button onclick="resetMemberState(${m.id})" title="clear a stuck lap state machine (laps survive)">reset</button>
-      <button onclick="deleteMember(${m.id}, '${m.name.replace(/'/g, "\\'")}')" title="remove a mis-join (team keeps its laps)">✕</button>
-    </div>`;
-  }).join('') || '<span class="muted">nobody yet</span>';
-}
-async function memberAction(id, action, method = 'POST', body) {
-  const r = await fetch(`/api/admin/members/${id}${action}`, {
-    method, headers: H(), body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!r.ok) alert('failed: ' + (await r.text()));
-  loadRoster(); loadEvent(evSlug.value.trim());
-}
-const freezeMember = (id) => memberAction(id, '/freeze');
-const unfreezeMember = (id) => memberAction(id, '/unfreeze');
-const resetMemberState = (id) => memberAction(id, '/reset-state');
-function activateMember(id) {
-  if (confirm('Make this member the team\'s live runner? The current one gets frozen.'))
-    memberAction(id, '/activate');
-}
-function renameMember(id, current) {
-  const name = prompt('New runner name:', current);
-  if (name?.trim()) memberAction(id, '', 'PATCH', { name });
-}
-function moveMember(id) {
-  const list = lastTeams.map((t) => `${t.id} = ${t.name}`).join('\n');
-  const v = prompt(`Move to which team? Enter a team id:\n${list}`);
-  if (v === null || !v.trim()) return;
-  memberAction(id, '', 'PATCH', { teamId: +v, moveLaps: true });
-}
-function deleteMember(id, name) {
-  if (confirm(`Remove "${name}"? Their laps stay with the team, unattributed.`))
-    memberAction(id, '', 'DELETE');
-}
-// Keep the roster live while race control is open.
-setInterval(() => { if (evSlug.value.trim() && !document.hidden) loadRoster(); }, 5000);
-async function setRepo(teamId, repoUrl) {
-  await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${teamId}`, {
-    method: 'PATCH', headers: H(), body: JSON.stringify({ repoUrl }),
-  });
-}
-async function addTeam() {
-  const slug = evSlug.value.trim();
-  await fetch(`/api/admin/events/${slug}/teams`, {
-    method: 'POST', headers: H(), body: JSON.stringify({ name: teamName.value.trim() }),
-  });
-  teamName.value = '';
-  loadEvent(slug);
-}
-async function delTeam(id) {
-  await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${id}`, { method: 'DELETE', headers: H() });
-  loadEvent(evSlug.value.trim());
-}
-
-// ---- Simulator: fake runner looping through the zone centroids ----
+/* ---------- simulator ---------- */
 let sims = [];
 function centroid(polygon) {
   const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length;
@@ -528,8 +726,7 @@ function metersBetween(a, b) {
   return Math.hypot(dLat, dLng);
 }
 async function startSim() {
-  if (zones.length < 2) return alert('Draw at least 2 zones first (and save the event).');
-  const slug = evSlug.value.trim();
+  if (zones.length < 2) return alert('Draw at least 2 zones first (and save them).');
   const teamId = +document.getElementById('simTeam').value;
   const name = document.getElementById('simName').value.trim() || 'Sim Runner';
   const lapS = +document.getElementById('simLapS').value;
@@ -537,14 +734,13 @@ async function startSim() {
   const noiseM = +document.getElementById('simNoise').value;
   const acc = +document.getElementById('simAcc').value;
 
-  const r = await fetch(`/api/${slug}/members`, {
+  const r = await fetch(`/api/${cur.slug}/members`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ teamId, name }),
   });
   if (!r.ok) return alert('register failed: ' + (await r.text()));
   const { userId } = await r.json();
 
-  // Closed loop through zone centroids in lap order.
   const path = [...zones.map((z) => centroid(z.polygon)), centroid(zones[0].polygon)];
   const segLens = path.slice(0, -1).map((p, i) => metersBetween(p, path[i + 1]));
   const totalLen = segLens.reduce((a, b) => a + b, 0);
@@ -577,16 +773,10 @@ function stopSim(userId) {
 }
 function renderSims() {
   document.getElementById('simList').innerHTML = sims.map((s) =>
-    `<div class="team-row"><span style="flex:1">● ${s.name} <span class="muted">${s.userId}</span></span>
+    `<div class="row"><span style="flex:1">● ${s.name} <span class="muted">${s.userId}</span></span>
      <button onclick="stopSim('${s.userId}')">⏹ stop</button></div>`).join('');
 }
 
-function renderLinks(slug) {
-  document.getElementById('links').innerHTML = `
-    Join (print this as the QR): <div class="url">${location.origin}/${slug}/join</div>
-    Board: <div class="url">${location.origin}/${slug}/board</div>
-    API: <div class="url">${location.origin}/api/${slug}/board</div>`;
-}
 boot();
 </script>
 </body>
