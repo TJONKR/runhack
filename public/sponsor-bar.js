@@ -24,14 +24,14 @@
 
   const style = document.createElement('style');
   style.textContent = `
-    #sponsor-bar { --sb-h: 17px; padding: 9px 0 11px; border-top: 1px solid rgba(244,243,239,0.1);
+    #sponsor-bar { --sb-h: 19px; padding: 9px 0 11px; border-top: 1px solid rgba(244,243,239,0.1);
                    overflow: hidden; width: 100%; }
     #sponsor-bar .strip { display: flex; gap: 48px; align-items: center; width: max-content;
                           animation: sponsor-marquee 120s linear infinite; }
     #sponsor-bar img { height: var(--sb-h); width: auto; display: block; opacity: 0.8; }
     #sponsor-bar img.partner { filter: brightness(0) invert(1); }
     @media (max-width: 760px) {
-      #sponsor-bar { --sb-h: 13px; padding: 7px 0 8px; }
+      #sponsor-bar { --sb-h: 15px; padding: 7px 0 8px; }
       #sponsor-bar .strip { gap: 34px; }
     }
     #sponsor-bar .sponsor-tile { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 10px;
