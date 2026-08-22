@@ -13,7 +13,10 @@
     --orange: #DD6A24; --gold: #F0BE2A; --sky: #3A90E6;
   }
   * { box-sizing: border-box; }
-  body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy); color: var(--paper); }
+  html, body { height: 100%; }
+  body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy); color: var(--paper);
+         display: flex; flex-direction: column; }
+  main { flex: 1; min-height: 0; overflow-y: auto; }
   .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
 
   header { background: var(--blue); padding: 18px 32px; display: flex; align-items: center; gap: 24px;
@@ -70,15 +73,6 @@
   #updated { color: rgba(244,243,239,0.5); }
   #updated.stale { color: var(--orange); }
 
-  footer { margin-top: 40px; padding: 16px 0 22px; border-top: 1px solid rgba(244,243,239,0.1);
-           overflow: hidden; width: 100%; }
-  .brands { display: flex; gap: 56px; align-items: center; width: max-content; animation: marquee 120s linear infinite; }
-  .brands img { height: 20px; opacity: 0.8; }
-  .brands img.partner { filter: brightness(0) invert(1); } /* white-out like the site's bar */
-  .sponsor-tile { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.25em;
-                  text-transform: uppercase; color: rgba(244,243,239,0.35); white-space: nowrap;
-                  border: 1px dashed rgba(244,243,239,0.25); padding: 6px 14px; }
-  @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 </style>
 </head>
 <body>
@@ -97,16 +91,19 @@
   <span id="updated"></span>
   <span>Pace rule: slower than 7'00"/km isn't running.</span>
 </div>
-<div id="state" style="display:none"></div>
-<table>
-  <thead><tr>
-    <th></th><th>Team</th><th>Runner</th>
-    <th class="num">Laps</th><th class="num">KM</th><th class="num">Commits</th>
-    <th class="num">Score</th><th class="num">Last lap</th><th class="num">Pace</th>
-  </tr></thead>
-  <tbody id="rows"></tbody>
-</table>
-<footer><div class="brands" id="brands"></div></footer>
+<main>
+  <div id="state" style="display:none"></div>
+  <table>
+    <thead><tr>
+      <th></th><th>Team</th><th>Runner</th>
+      <th class="num">Laps</th><th class="num">KM</th><th class="num">Commits</th>
+      <th class="num">Score</th><th class="num">Last lap</th><th class="num">Pace</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</main>
+<footer id="sponsor-bar"></footer>
+<script src="/sponsor-bar.js"></script>
 
 <script>
 const slug = location.pathname.split('/')[1];
@@ -229,29 +226,9 @@ function renderGun() {
     `<div class="gun-cell"><b>${String(v).padStart(u === 'days' ? 3 : 2, '0')}</b><span>${u}</span></div>`).join('');
 }
 
-async function loadBrands() {
-  try {
-    const files = await (await fetch('/api/brands')).json();
-    // Pattern: RUN/HACK · ROXFIT · one partner, repeat through every partner.
-    // Files 01-/02- are the anchors; everything else in public/brands/ rotates.
-    const img = (f, cls = '') => `<img src="${f}" alt=""${cls ? ` class="${cls}"` : ''}>`;
-    const anchors = files.filter((f) => /\/0[12]-/.test(f)).map((f) => img(f)).join('');
-    const partners = files.filter((f) => !/\/0[12]-/.test(f));
-    let strip = partners.length
-      ? partners.map((p) => anchors + img(p, 'partner')).join('')
-      : (anchors + `<span class="sponsor-tile">Sponsor</span>`).repeat(4);
-    while (strip.length && (strip.match(/<img/g) || []).length < 24) strip += strip; // fill width
-    const el = document.getElementById('brands');
-    el.innerHTML = strip + strip; // doubled for seamless marquee
-    // Constant speed regardless of logo count — measure once images have loaded.
-    await Promise.allSettled([...el.querySelectorAll('img')].map((i) => i.decode()));
-    el.style.animationDuration = `${(el.scrollWidth / 2) / 30}s`; // 30 px/s
-  } catch {}
-}
-
 setInterval(tick, 3000);
 setInterval(() => { renderGun(); renderUpdated(); }, 1000);
-tick(); loadBrands();
+tick();
 </script>
 </body>
 </html>
