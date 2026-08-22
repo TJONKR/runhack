@@ -23,6 +23,7 @@
                text-transform: uppercase; color: rgba(244,243,239,0.7); }
   main { max-width: 900px; margin: 0 auto; padding: 28px 24px; display: grid;
          grid-template-columns: 300px 1fr; gap: 36px; }
+  main > div { min-width: 0; } /* let the stats column shrink; nowrap children ellipsize instead of overflowing */
   @media (max-width: 720px) { main { grid-template-columns: 1fr; } }
   h1 { font-size: 40px; font-weight: 900; letter-spacing: -1px; margin: 0 0 4px; }
   .mono { font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.15em;
@@ -31,12 +32,17 @@
   .qr img { display: block; width: 100%; }
   .qr-label { text-align: center; margin-top: 10px; font-family: 'Geist Mono', monospace;
               font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: rgba(244,243,239,0.6); }
-  .stats { display: flex; gap: 2px; margin: 18px 0 26px; flex-wrap: wrap; }
-  .stat { background: rgba(244,243,239,0.06); padding: 10px 18px; min-width: 90px; }
-  .stat b { display: block; font-family: 'Geist Mono', monospace; font-size: 26px; font-weight: 600; }
+  .stats { display: flex; gap: 2px; margin: 18px 0 8px; flex-wrap: wrap; }
+  .stat { background: rgba(244,243,239,0.06); padding: 10px 16px; min-width: 86px; }
+  .stat b { display: block; font-family: 'Geist Mono', monospace; font-size: 24px; font-weight: 600; }
   .stat.score b { color: var(--gold); }
+  .stat.best b { color: #4ade80; }
   .stat span { font-family: 'Geist Mono', monospace; font-size: 9px; letter-spacing: 0.2em;
                text-transform: uppercase; color: rgba(244,243,239,0.5); }
+  .stat .sub { display: block; font-family: 'Geist Mono', monospace; font-size: 10px;
+               color: rgba(244,243,239,0.45); margin-top: 1px; letter-spacing: 0; text-transform: none; }
+  .commitline { font-family: 'Geist Mono', monospace; font-size: 11px; color: rgba(244,243,239,0.5);
+                margin: 0 0 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .member { display: flex; align-items: center; gap: 10px; padding: 10px 0;
             border-top: 1px solid rgba(244,243,239,0.1); }
   .member .name { font-weight: 700; flex: 1; }
@@ -77,11 +83,15 @@
     <div class="mono" id="repo"></div>
     <div class="ready" id="ready" style="display:none"></div>
     <div class="stats">
-      <div class="stat"><b id="laps">0</b><span>laps</span></div>
-      <div class="stat"><b id="km">0.0</b><span>km</span></div>
-      <div class="stat"><b id="commits">0</b><span>commits</span></div>
       <div class="stat score"><b id="score">0</b><span>score</span></div>
+      <div class="stat"><b id="laps">0</b><span>laps</span><span class="sub" id="invalids"></span></div>
+      <div class="stat"><b id="km">0.0</b><span>km</span></div>
+      <div class="stat"><b id="commits">0</b><span>commits</span><span class="sub" id="committers"></span></div>
+      <div class="stat best"><b id="bestlap">—</b><span>best lap</span><span class="sub" id="bestpace"></span></div>
+      <div class="stat"><b id="avglap">—</b><span>avg lap</span><span class="sub" id="avgpace"></span></div>
+      <div class="stat"><b id="lastlap">—</b><span>last lap</span><span class="sub" id="lastpace"></span></div>
     </div>
+    <div class="commitline" id="commitline" style="display:none"></div>
     <div class="mono" style="margin-bottom:6px">Runners</div>
     <div id="members"></div>
     <div class="mono" style="margin:22px 0 6px">Tracking devices</div>
@@ -121,12 +131,27 @@ async function tick() {
           item(rd.devicesConnected >= 1, 'device connected') +
           item(rd.githubConnected, rd.repoSet ? 'github verified' : 'github repo');
     }
+    const pace = (s) => s == null ? '' : `${Math.floor(s / 60)}'${String(Math.round(s % 60)).padStart(2, '0')}"/km`;
     laps.textContent = t.laps; km.textContent = t.km.toFixed(1);
     commits.textContent = t.commits; score.textContent = t.score;
+    invalids.textContent = t.invalidLaps ? `+${t.invalidLaps} invalid` : '';
+    committers.textContent = t.committers ? `${t.committers} committing` : '';
+    bestlap.textContent = t.bestLapS != null ? t.bestLapS + 's' : '—';
+    bestpace.textContent = pace(t.bestPaceSPerKm);
+    avglap.textContent = t.avgLapS != null ? t.avgLapS + 's' : '—';
+    avgpace.textContent = pace(t.avgPaceSPerKm);
+    lastlap.textContent = t.lastLapS != null ? t.lastLapS + 's' : '—';
+    lastpace.textContent = pace(t.lastPaceSPerKm);
+    const cl = document.getElementById('commitline');
+    if (t.lastCommit) {
+      cl.style.display = '';
+      const ago = t.lastCommit.agoS != null ? ` · ${Math.round(t.lastCommit.agoS / 60)}m ago` : '';
+      cl.textContent = `↑ ${t.lastCommit.message}${t.lastCommit.author ? ' — ' + t.lastCommit.author : ''}${ago}`;
+    } else cl.style.display = 'none';
     document.getElementById('members').innerHTML = t.members.map((m) =>
       `<div class="member"><span class="dot idle"></span>
         <span class="name">${esc(m.name)}</span>
-        <span class="tag">${m.laps} ${m.laps === 1 ? 'lap' : 'laps'}</span></div>`
+        <span class="tag">${m.laps} ${m.laps === 1 ? 'lap' : 'laps'}${m.bestLapS != null ? ` · best ${m.bestLapS}s` : ''}</span></div>`
     ).join('') || '<div class="tag">Nobody yet — scan the QR</div>';
 
     document.getElementById('devices').innerHTML = (t.devices || []).map((d) => {

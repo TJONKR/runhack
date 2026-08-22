@@ -123,7 +123,8 @@ router.get('/:slug/team/:teamId', async (req, res) => {
   const event = ev.rows[0];
   if (!event) return res.status(404).json({ error: 'no such event' });
   const t = await pool.query(
-    `SELECT id, name, repo_url, repo_status, commit_count, commit_override, score_adjust, active_device_id
+    `SELECT id, name, repo_url, repo_status, commit_count, commit_override, score_adjust, active_device_id,
+            last_commit_msg, last_commit_author, last_commit_at, committers
        FROM teams WHERE id = $1 AND event_id = $2`,
     [req.params.teamId, event.id]
   );
@@ -131,9 +132,10 @@ router.get('/:slug/team/:teamId', async (req, res) => {
   if (!team) return res.status(404).json({ error: 'no such team' });
 
   const members = await pool.query(
-    `SELECT m.id, m.name, COALESCE(l.laps, 0) AS laps
+    `SELECT m.id, m.name, COALESCE(l.laps, 0) AS laps, l.best_s
        FROM members m
-       LEFT JOIN (SELECT member_id, count(*) AS laps FROM laps WHERE counted GROUP BY member_id) l
+       LEFT JOIN (SELECT member_id, count(*) AS laps, min(seconds) AS best_s
+                    FROM laps WHERE counted GROUP BY member_id) l
          ON l.member_id = m.id
       WHERE m.team_id = $1 ORDER BY m.created_at ASC`,
     [team.id]
@@ -146,11 +148,19 @@ router.get('/:slug/team/:teamId', async (req, res) => {
     [team.id]
   );
   const lapAgg = await pool.query(
-    'SELECT count(*) FILTER (WHERE counted) AS valid FROM laps WHERE team_id = $1',
+    `SELECT count(*) FILTER (WHERE counted) AS valid,
+            count(*) FILTER (WHERE NOT counted) AS invalid,
+            avg(seconds) FILTER (WHERE counted) AS avg_s,
+            min(seconds) FILTER (WHERE counted) AS best_s,
+            (SELECT seconds FROM laps WHERE team_id = $1 AND counted
+              ORDER BY finished_at DESC LIMIT 1) AS last_s
+       FROM laps WHERE team_id = $1`,
     [team.id]
   );
   const config = eventConfig(event);
-  const laps = Number(lapAgg.rows[0].valid);
+  const agg = lapAgg.rows[0];
+  const paceDistM = config.officialTiming === 'exit_entry' ? config.timedSegmentM : config.lapM;
+  const laps = Number(agg.valid);
   const km = +((laps * config.lapM) / 1000).toFixed(2);
   const commits = team.commit_override ?? (Number(team.commit_count) || 0);
   res.json({
@@ -161,8 +171,25 @@ router.get('/:slug/team/:teamId', async (req, res) => {
     teamId: team.id,
     repo: team.repo_url || null,
     commits,
+    committers: team.committers ?? null,
+    lastCommit: team.last_commit_msg
+      ? {
+          message: team.last_commit_msg,
+          author: team.last_commit_author,
+          agoS: team.last_commit_at
+            ? Math.round((Date.now() - new Date(team.last_commit_at).getTime()) / 1000)
+            : null,
+        }
+      : null,
     laps,
+    invalidLaps: Number(lapAgg.rows[0].invalid) || 0,
     km,
+    lastLapS: agg.last_s != null ? Math.round(agg.last_s) : null,
+    avgLapS: agg.avg_s != null ? Math.round(agg.avg_s) : null,
+    bestLapS: agg.best_s != null ? Math.round(agg.best_s) : null,
+    lastPaceSPerKm: agg.last_s != null ? Math.round(agg.last_s / (paceDistM / 1000)) : null,
+    avgPaceSPerKm: agg.avg_s != null ? Math.round(agg.avg_s / (paceDistM / 1000)) : null,
+    bestPaceSPerKm: agg.best_s != null ? Math.round(agg.best_s / (paceDistM / 1000)) : null,
     score: +(teamScore(km, commits, config) + Number(team.score_adjust || 0)).toFixed(2),
     readiness: {
       minMembers: config.minTeamSize,
@@ -179,6 +206,7 @@ router.get('/:slug/team/:teamId', async (req, res) => {
       id: m.id,
       name: m.name,
       laps: Number(m.laps),
+      bestLapS: m.best_s != null ? Math.round(m.best_s) : null,
     })),
     devices: devices.rows.map((d) => ({
       token: d.token, // capability: whoever can see the team page can manage its devices
@@ -204,6 +232,7 @@ router.get('/:slug/board', async (req, res) => {
             COALESCE(dm.name, ad.name, CASE WHEN ad.id IS NULL THEN NULL ELSE 'Team device' END) AS runner_name,
             ad.last_fix AS runner_last_fix,
             ll.seconds AS last_lap_s, ll.counted AS last_lap_valid, ll.reject_reason AS last_lap_reason,
+            l.avg_s AS avg_lap_s,
             COALESCE(l.valid, 0) AS valid_laps, COALESCE(l.invalid, 0) AS invalid_laps
        FROM teams t
        LEFT JOIN devices ad ON ad.id = t.active_device_id
@@ -211,7 +240,8 @@ router.get('/:slug/board', async (req, res) => {
        LEFT JOIN (
          SELECT team_id,
                 count(*) FILTER (WHERE counted) AS valid,
-                count(*) FILTER (WHERE NOT counted) AS invalid
+                count(*) FILTER (WHERE NOT counted) AS invalid,
+                avg(seconds) FILTER (WHERE counted) AS avg_s
            FROM laps WHERE event_id = $1 GROUP BY team_id
        ) l ON l.team_id = t.id
        LEFT JOIN LATERAL (
@@ -222,6 +252,7 @@ router.get('/:slug/board', async (req, res) => {
     [event.id]
   );
 
+  const paceDistM = config.officialTiming === 'exit_entry' ? config.timedSegmentM : config.lapM;
   const board = teams.rows
     .map((t) => {
       const laps = Number(t.valid_laps);
@@ -254,12 +285,22 @@ router.get('/:slug/board', async (req, res) => {
           : null,
         score: +(teamScore(km, commits, config) + Number(t.score_adjust || 0)).toFixed(2),
         lastLap: t.last_lap_s != null
-          ? { seconds: Math.round(t.last_lap_s), valid: t.last_lap_valid, reason: t.last_lap_reason }
+          ? {
+              seconds: Math.round(t.last_lap_s),
+              valid: t.last_lap_valid,
+              reason: t.last_lap_reason,
+              paceSPerKm: t.last_lap_valid ? Math.round(t.last_lap_s / (paceDistM / 1000)) : null,
+            }
+          : null,
+        avgLap: t.avg_lap_s != null
+          ? {
+              seconds: Math.round(t.avg_lap_s),
+              paceSPerKm: Math.round(t.avg_lap_s / (paceDistM / 1000)),
+            }
           : null,
         paceSPerKm:
           t.last_lap_s != null && t.last_lap_valid
-            ? Math.round(t.last_lap_s /
-                ((config.officialTiming === 'exit_entry' ? config.timedSegmentM : config.lapM) / 1000))
+            ? Math.round(t.last_lap_s / (paceDistM / 1000))
             : null,
         lastPingAgoS: lastFixAgoS,
       };

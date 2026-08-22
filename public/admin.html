@@ -601,7 +601,9 @@ function renderTeams() {
       ? `<span class="statuschip" style="color:var(--gold);border-color:var(--gold)" title="needs: ${missing.join(', ')}">needs ${missing.join(' · ')}</span>`
       : `<span class="statuschip" style="color:var(--ok);border-color:var(--ok)">ready</span>`;
     return `<div class="card">
-      <div class="row"><span style="flex:1"><b style="font-size:15px">${t.name}</b>
+      <div class="row"><span style="flex:1">
+        <a href="/${cur.slug}/team/${t.id}" target="_blank" style="color:inherit;text-decoration:none"
+           title="open team page"><b style="font-size:15px">${t.name}</b></a>
         <span class="muted">#${t.id} · ${t.member_count} joins · ${t.connected_count} device${t.connected_count == 1 ? '' : 's'} pinged · ${commits} commits${ovr}${adj}</span></span>
         ${chip}
         <a href="/${cur.slug}/team/${t.id}" target="_blank"><button title="team page + QR">QR page</button></a>
