@@ -11,10 +11,12 @@ const backZone = {
   name: 'back straight',
   polygon: [[51.5390, -0.0150], [51.5390, -0.0140], [51.5386, -0.0140], [51.5386, -0.0150]],
 };
+// Window calibrated to the timed segment (exit start box -> re-enter it),
+// ~350m of a 400m lap: 7:00/km ceiling = 147s, sprint floor = 48s.
 const config = {
   zones: [startZone, backZone],
-  minLapS: 55,
-  maxLapS: 168,
+  minLapS: 48,
+  maxLapS: 147,
   entryFixes: 1,
   exitFixes: 2,
   maxAccuracyM: 40,
@@ -54,12 +56,13 @@ test('point in polygon', () => {
   assert.equal(pointInPolygon(ON_COURSE.lat, ON_COURSE.lng, startZone.polygon), false);
 });
 
-test('a clean 100s lap is credited', () => {
+test('a clean 100s lap is credited, timed from leaving the start box', () => {
   const { state, events } = run(lapFixes(0, 100));
   const laps = events.filter((e) => e.type === 'lap');
   assert.equal(laps.length, 1);
   assert.equal(laps[0].counted, true);
-  assert.equal(Math.round(laps[0].seconds), 100);
+  // exit confirmed at t=30 (second fix outside), re-entry at t=100 -> 70s
+  assert.equal(Math.round(laps[0].seconds), 70);
   assert.equal(state.lapCount, 1);
 });
 
@@ -77,8 +80,19 @@ test('a 40s "lap" (GPS bounce) is rejected as too fast', () => {
   assert.equal(state.lapCount, 0);
 });
 
-test('a 200s walk lap is rejected as too slow', () => {
-  const { events } = run(lapFixes(0, 200));
+test('a walking lap is rejected as too slow', () => {
+  // Realistic walker at ~2 m/s: crosses the ~50m start box in ~25s, then
+  // takes 175s over the ~350m timed segment (8:20/km) -> over the 147s cap.
+  const t = (pos, dt) => ({ ...pos, timestampMs: dt * 1000, accuracyM: 10 });
+  const { events } = run([
+    t(IN_START, 0),
+    t(ON_COURSE, 23),
+    t(ON_COURSE, 25), // exit confirmed -> clock starts
+    t(IN_BACK, 100),
+    t(ON_COURSE, 150),
+    t(ON_COURSE, 160),
+    t(IN_START, 200), // 175s segment
+  ]);
   const lap = events.find((e) => e.type === 'lap');
   assert.equal(lap.counted, false);
   assert.equal(lap.reason, 'too_slow');
@@ -94,8 +108,8 @@ test('start -> start without the back straight does not score', () => {
   ]);
   assert.equal(events.filter((e) => e.type === 'lap').length, 0);
   assert.equal(state.lapCount, 0);
-  // ...but the lap re-arms from this entry
-  assert.equal(state.lapStartedAt, 100_000);
+  // ...and the lap re-arms: clock cleared until they leave the box again
+  assert.equal(state.lapStartedAt, null);
 });
 
 test('rejected lap still re-arms: next full lap counts', () => {
@@ -128,6 +142,27 @@ test('two-fix entry dwell requires two fixes in the zone', () => {
   assert.equal(state.inZone, null);
   ({ state } = run([t(IN_START, 0), t(IN_START, 2)], cfg));
   assert.equal(state.inZone, 0);
+});
+
+test('standing at the start line (handoff) does not poison the first lap', () => {
+  const t = (pos, dt) => ({ ...pos, timestampMs: dt * 1000, accuracyM: 10 });
+  // Enter start, stand for 120s (would make a 220s "lap" = too_slow without
+  // the linger reset), then run a clean 98s lap.
+  const { state, events } = run([
+    t(IN_START, 0),
+    t(IN_START, 60),
+    t(IN_START, 120),
+    t(ON_COURSE, 122), // exit takes two fixes
+    t(ON_COURSE, 124), // exit confirmed here -> lap clock re-bases to 124
+    t(IN_BACK, 170),
+    t(ON_COURSE, 190),
+    t(ON_COURSE, 195),
+    t(IN_START, 222),
+  ]);
+  const lap = events.find((e) => e.type === 'lap');
+  assert.equal(lap.counted, true);
+  assert.equal(Math.round(lap.seconds), 98);
+  assert.equal(state.lapCount, 1);
 });
 
 test('three-zone course requires all checkpoints in order', () => {

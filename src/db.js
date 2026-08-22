@@ -98,14 +98,18 @@ export function teamScore(km, commits, config) {
   return +(km * commits).toFixed(2);
 }
 
-// Per-event lap rules, with defaults for a 400m track and the 7:00/km floor
-// (7:00/km over 400m = 168s). Dev events can override everything.
+// Per-event lap rules. Laps are TIMED from exiting the start box to
+// re-entering it, so the timed segment is (lap - start-box crossing) —
+// default 350m of a 400m track. minLapS/maxLapS and pace are calibrated to
+// that segment: 7:00/km over 350m = 147s. Board km stays laps x lapM.
 export function eventConfig(event) {
   const c = event.config || {};
+  const lapM = c.lapM ?? 400;
   return {
-    lapM: c.lapM ?? 400,
-    minLapS: c.minLapS ?? 55,
-    maxLapS: c.maxLapS ?? 168,
+    lapM,
+    timedSegmentM: c.timedSegmentM ?? Math.max(100, lapM - 50),
+    minLapS: c.minLapS ?? 48,
+    maxLapS: c.maxLapS ?? 147,
     entryFixes: c.entryFixes ?? 1,
     exitFixes: c.exitFixes ?? 2,
     maxAccuracyM: c.maxAccuracyM ?? 40,

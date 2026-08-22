@@ -2,14 +2,20 @@
 //
 // An event has an ordered list of zones (polygons). Zone 0 is start/finish.
 // A lap is credited on the sequence: enter zone 0 (arms the lap) -> enter zone 1
-// -> ... -> enter zone n-1 -> enter zone 0 again, with the elapsed time inside
-// [minLapS, maxLapS]. Out-of-window laps re-arm but do not score.
+// -> ... -> enter zone n-1 -> enter zone 0 again.
+//
+// Lap TIMING runs from EXITING zone 0 to re-ENTERING it, so time spent
+// standing in the start box (handoffs, waiting for the gun, mid-stint pauses
+// at base) never counts against the lap. The measured segment is therefore
+// (lap length - start-box crossing): calibrate minLapS/maxLapS to that
+// distance, e.g. ~350m of a 400m track at the 7:00/km ceiling ≈ 147s.
+// Out-of-window laps re-arm but do not score.
 
 export function createState() {
   return {
     armed: false,        // has the runner entered zone 0 at least once
     nextZone: 0,         // next zone index that must be entered
-    lapStartedAt: null,  // ms epoch of last zone-0 entry
+    lapStartedAt: null,  // ms epoch of the last zone-0 EXIT (lap clock start)
     inZone: null,        // zone index the runner is officially inside, or null
     candZone: null,      // zone being dwell-counted for entry
     candStreak: 0,
@@ -79,8 +85,12 @@ export function processFix(state, fix, config) {
   } else {
     s.exitStreak += 1;
     if (s.exitStreak >= exitFixes) {
+      const leftZone = s.inZone;
       s.inZone = null;
       s.exitStreak = 0;
+      // The lap clock starts when the runner leaves the start box — so
+      // standing at the line (handoff, gun, mid-stint pause) never counts.
+      if (leftZone === 0 && s.armed) s.lapStartedAt = fix.timestampMs;
       if (zone !== null) {
         // this fix immediately starts dwell for the new zone
         s.candZone = zone;
@@ -99,7 +109,7 @@ export function processFix(state, fix, config) {
     events.push({ type: 'zone_enter', zone: entered });
 
     if (entered === 0) {
-      if (s.armed && s.nextZone === 0) {
+      if (s.armed && s.nextZone === 0 && s.lapStartedAt != null) {
         const seconds = (fix.timestampMs - s.lapStartedAt) / 1000;
         const counted = seconds >= config.minLapS && seconds <= config.maxLapS;
         if (counted) {
@@ -113,9 +123,10 @@ export function processFix(state, fix, config) {
           reason: counted ? null : seconds < config.minLapS ? 'too_fast' : 'too_slow',
         });
       }
-      // Any zone-0 entry (re-)arms the next lap, including a wrong-way or aborted one.
+      // Any zone-0 entry (re-)arms the next lap, including a wrong-way or
+      // aborted one. The lap clock starts on the way OUT of the box.
       s.armed = true;
-      s.lapStartedAt = fix.timestampMs;
+      s.lapStartedAt = null;
       s.nextZone = config.zones.length > 1 ? 1 : 0;
     } else if (s.armed && entered === s.nextZone) {
       s.nextZone = (entered + 1) % config.zones.length;

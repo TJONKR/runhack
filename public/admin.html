@@ -185,8 +185,9 @@
           </div>
           <div class="grid3" style="margin-top:6px">
             <label class="muted">lap metres <input type="number" id="cfgLapM" value="400"></label>
-            <label class="muted">min lap s <input type="number" id="cfgMin" value="55"></label>
-            <label class="muted">max lap s <input type="number" id="cfgMax" value="168"></label>
+            <label class="muted" title="laps are timed from leaving the start box to returning — roughly lap length minus the box">timed segment m <input type="number" id="cfgSegment" value="350"></label>
+            <label class="muted">min lap s <input type="number" id="cfgMin" value="48"></label>
+            <label class="muted">max lap s <input type="number" id="cfgMax" value="147"></label>
             <label class="muted">max accuracy m <input type="number" id="cfgAcc" value="40"></label>
             <label class="muted">entry fixes <input type="number" id="cfgEntry" value="1"></label>
             <label class="muted">exit fixes <input type="number" id="cfgExit" value="2"></label>
@@ -197,7 +198,9 @@
               </select></label>
             <label class="muted">commit weight <input type="number" id="cfgWeight" value="0.1" step="0.05"></label>
           </div>
-          <p class="muted">Laps outside start–end are recorded but invalid. Commits count from start.
+          <p class="muted">Laps are timed from leaving the start box to returning, so min/max lap s
+            apply to the <b>timed segment</b> (≈ lap − start box; 7:00/km over 350m = 147s).
+            Laps outside start–end are recorded but invalid. Commits count from start.
             Walkable test event: min lap ~10, max lap ~1200.</p>
           <button class="primary" onclick="saveEvent()">Save event</button>
           <span id="saveMsg" class="muted"></span>
@@ -447,7 +450,8 @@ function renderSetup() {
   const c = cur.config || {};
   evSlug.value = cur.slug; evName.value = cur.name;
   cfgLapM.value = c.lapM ?? 400; cfgAcc.value = c.maxAccuracyM ?? 40;
-  cfgMin.value = c.minLapS ?? 55; cfgMax.value = c.maxLapS ?? 168;
+  cfgSegment.value = c.timedSegmentM ?? Math.max(100, (c.lapM ?? 400) - 50);
+  cfgMin.value = c.minLapS ?? 48; cfgMax.value = c.maxLapS ?? 147;
   cfgEntry.value = c.entryFixes ?? 1; cfgExit.value = c.exitFixes ?? 2;
   cfgFormula.value = c.scoreFormula ?? 'km_x_commits'; cfgWeight.value = c.commitWeight ?? 0.1;
   evStart.value = toLocalInput(cur.start_at); evEnd.value = toLocalInput(cur.end_at);
@@ -471,6 +475,7 @@ async function saveEvent() {
     endAt: evEnd.value ? new Date(evEnd.value).toISOString() : null,
     config: {
       lapM: +cfgLapM.value, maxAccuracyM: +cfgAcc.value,
+      timedSegmentM: +cfgSegment.value,
       minLapS: +cfgMin.value, maxLapS: +cfgMax.value,
       entryFixes: +cfgEntry.value, exitFixes: +cfgExit.value,
       scoreFormula: cfgFormula.value, commitWeight: +cfgWeight.value,
