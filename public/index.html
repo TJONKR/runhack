@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RUN/HACK live</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root { --paper: #F4F3EF; --navy: #08182F; --navy2: #0C2140; --blue: #1311D1;
+          --orange: #DD6A24; --gold: #F0BE2A; --sky: #3A90E6; --ok: #4ade80; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy); color: var(--paper); }
+  header { background: var(--blue); border-bottom: 4px solid var(--gold); padding: 26px 24px;
+           text-align: center; position: relative; }
+  .wordmark { font-weight: 900; font-size: 44px; letter-spacing: -2px; }
+  .wordmark .slash { color: var(--orange); }
+  .tag { font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.25em;
+         text-transform: uppercase; color: rgba(244,243,239,0.7); margin-top: 4px; }
+  .powered { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 10px;
+             font-family: 'Geist Mono', monospace; font-size: 8px; letter-spacing: 0.28em;
+             text-transform: uppercase; color: rgba(244,243,239,0.55); }
+  .powered img { height: 14px; display: block; }
+  main { max-width: 720px; margin: 0 auto; padding: 30px 20px 60px; }
+  h2 { font-family: 'Geist Mono', monospace; font-size: 11px; margin: 30px 0 10px; text-transform: uppercase;
+       letter-spacing: 0.25em; color: var(--sky); }
+  a.card { display: flex; align-items: center; gap: 14px; background: var(--navy2);
+           border: 1px solid rgba(244,243,239,0.12); border-radius: 8px; padding: 18px 20px;
+           margin: 10px 0; text-decoration: none; color: var(--paper); }
+  a.card:hover { border-color: var(--sky); }
+  .name { font-weight: 900; font-size: 20px; letter-spacing: -0.5px; flex: 1; }
+  .meta { font-family: 'Geist Mono', monospace; font-size: 11px; color: rgba(244,243,239,0.5);
+          letter-spacing: 0.05em; display: block; margin-top: 3px; font-weight: 400; }
+  .chip { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.15em;
+          text-transform: uppercase; padding: 4px 12px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+  .arrow { color: var(--gold); font-size: 22px; }
+  .empty { color: rgba(244,243,239,0.45); font-size: 14px; padding: 30px 0; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">RUN<span class="slash">/</span>HACK</div>
+  <div class="tag">You run. You build. · Live boards</div>
+  <div class="powered">Powered by <img src="/brands/02-roxfit.png" alt="ROXFIT"></div>
+</header>
+<main id="main"><div class="empty">Loading events…</div></main>
+<script>
+const COLOURS = { live: 'var(--ok)', paused: 'var(--gold)', upcoming: 'var(--sky)', finished: 'var(--orange)' };
+const LABELS = { live: 'live now', paused: 'paused', upcoming: 'upcoming', finished: 'finished' };
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+(async () => {
+  const events = await (await fetch('/api/events')).json();
+  const groups = { live: [], paused: [], upcoming: [], finished: [] };
+  events.forEach((e) => (groups[e.status] || groups.finished).push(e));
+  const card = (e) => `<a class="card" href="/${e.slug}/board">
+    <span class="name">${esc(e.name)}
+      <span class="meta">${e.startAt ? new Date(e.startAt).toLocaleString([], {dateStyle:'medium', timeStyle:'short'}) : ''}</span></span>
+    <span class="chip" style="color:${COLOURS[e.status]};border-color:${COLOURS[e.status]}">${LABELS[e.status]}</span>
+    <span class="arrow">→</span></a>`;
+  const section = (key, title) => groups[key].length ? `<h2>${title}</h2>` + groups[key].map(card).join('') : '';
+  document.getElementById('main').innerHTML =
+    section('live', 'Live now') + section('paused', 'Paused') +
+    section('upcoming', 'Upcoming') + section('finished', 'Past events') ||
+    '<div class="empty">No events yet.</div>';
+})();
+</script>
+</body>
+</html>

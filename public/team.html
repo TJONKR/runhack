@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>RUN/HACK team</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@400;700;900&display=swap" rel="stylesheet">
@@ -12,8 +13,12 @@
   body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy); color: var(--paper); }
   header { background: var(--blue); padding: 14px 24px; border-bottom: 3px solid var(--gold);
            display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
-  .wordmark { font-weight: 900; font-size: 24px; letter-spacing: -1px; }
+  .wordmark { font-weight: 900; font-size: 24px; letter-spacing: -1px; line-height: 1; }
   .wordmark .slash { color: var(--orange); }
+  .powered { display: flex; align-items: center; gap: 6px; margin-top: 4px;
+             font-family: 'Geist Mono', monospace; font-size: 7px; letter-spacing: 0.28em;
+             text-transform: uppercase; color: rgba(244,243,239,0.55); }
+  .powered img { height: 11px; display: block; }
   .eventname { font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.15em;
                text-transform: uppercase; color: rgba(244,243,239,0.7); }
   main { max-width: 900px; margin: 0 auto; padding: 28px 24px; display: grid;
@@ -52,7 +57,10 @@
 </head>
 <body>
 <header>
-  <div class="wordmark">RUN<span class="slash">/</span>HACK</div>
+  <div>
+    <div class="wordmark">RUN<span class="slash">/</span>HACK</div>
+    <div class="powered">Powered by <img src="/brands/02-roxfit.png" alt="ROXFIT"></div>
+  </div>
   <div class="eventname" id="eventname"></div>
 </header>
 <main>
