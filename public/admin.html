@@ -71,8 +71,10 @@
   .eventcard .name { font-weight: 700; font-size: 17px; }
   .eventcard .meta { font-family: 'Geist Mono', monospace; font-size: 11px; color: rgba(244,243,239,0.5); }
 
-  /* map tab */
-  #tab-map { display: flex; height: 100%; min-height: 0; }
+  /* map tab — only laid out when active (.flexon); the bare #tab-map rule must
+     not set display, or it would override .etab's display:none on other tabs */
+  #tab-map { height: 100%; min-height: 0; }
+  #tab-map.flexon { display: flex; }
   #mapside { width: 340px; overflow-y: auto; padding: 16px 20px; border-right: 1px solid var(--line); }
   #map { flex: 1; }
   .zone-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
@@ -503,22 +505,46 @@ function copyText(text, btn) {
     () => prompt('Copy:', text)
   ) || prompt('Copy:', text);
 }
+function teamReadiness(t) {
+  const min = cur.config?.minTeamSize ?? 3;
+  const missing = [];
+  if (Number(t.member_count) < min) missing.push(`${min - t.member_count} more runner${min - t.member_count > 1 ? 's' : ''}`);
+  if (Number(t.connected_count) < 1) missing.push('a device ping');
+  if (t.repo_status !== 'connected') missing.push('github');
+  return missing;
+}
+function repoPill(t) {
+  if (!t.repo_url) return `<span class="muted">no repo</span>`;
+  const map = {
+    connected: ['connected ✓', 'var(--ok)'],
+    error: ['error ✕', 'var(--orange)'],
+  };
+  const [label, col] = map[t.repo_status] || ['untested', 'rgba(244,243,239,0.5)'];
+  return `<span class="statuschip" style="color:${col};border-color:${col}">${label}</span>`;
+}
 function renderTeams() {
   const teams = cur.teams || [];
   document.getElementById('teamList').innerHTML = teams.map((t) => {
     const commits = t.commit_override ?? t.commit_count ?? 0;
     const ovr = t.commit_override != null ? ` <span style="color:var(--gold)">(override)</span>` : '';
     const adj = Number(t.score_adjust) ? ` · adj ${t.score_adjust > 0 ? '+' : ''}${t.score_adjust}` : '';
+    const missing = teamReadiness(t);
+    const chip = missing.length
+      ? `<span class="statuschip" style="color:var(--gold);border-color:var(--gold)" title="needs: ${missing.join(', ')}">needs ${missing.join(' · ')}</span>`
+      : `<span class="statuschip" style="color:var(--ok);border-color:var(--ok)">ready</span>`;
     return `<div class="card">
       <div class="row"><span style="flex:1"><b style="font-size:15px">${t.name}</b>
-        <span class="muted">#${t.id} · ${t.member_count} joins · ${commits} commits${ovr}${adj}</span></span>
+        <span class="muted">#${t.id} · ${t.member_count} joins · ${t.connected_count} device${t.connected_count == 1 ? '' : 's'} pinged · ${commits} commits${ovr}${adj}</span></span>
+        ${chip}
         <a href="/${cur.slug}/team/${t.id}" target="_blank"><button title="team page + QR">QR page</button></a>
         <button onclick="addLap(${t.id})">+lap</button>
         <button onclick="toggleLaps(${t.id})">laps</button>
         <button onclick="renameTeam(${t.id})">rename</button>
         <button onclick="delTeam(${t.id})">✕</button></div>
-      <div class="row"><input type="text" placeholder="github repo url" value="${t.repo_url || ''}"
-        onchange="patchTeam(${t.id}, { repoUrl: this.value })" style="flex:1;font-size:12px"></div>
+      <div class="row"><input type="text" placeholder="github repo url (public)" value="${t.repo_url || ''}"
+        onchange="patchTeam(${t.id}, { repoUrl: this.value })" style="flex:1;font-size:12px">
+        ${repoPill(t)}
+        <button onclick="checkRepo(${t.id}, this)" title="verify the repo is public and reachable, refresh commit count">test</button></div>
       <div class="row" style="font-size:12px">
         <span class="muted">links:</span>
         <button onclick="copyText('${location.origin}/${cur.slug}/join?team=${t.id}', this)">copy join link</button>
@@ -531,6 +557,16 @@ function renderTeams() {
       <div id="laps-${t.id}" style="display:none;margin-top:6px;padding-left:10px;border-left:2px solid var(--line)"></div>
     </div>`;
   }).join('') || '<div class="muted">No teams yet.</div>';
+}
+async function checkRepo(teamId, btn) {
+  btn.textContent = 'testing…';
+  const r = await fetch(`/api/admin/events/${cur.slug}/teams/${teamId}/check-repo`, {
+    method: 'POST', headers: H(),
+  });
+  const v = await r.json();
+  if (v.status === 'not_set') alert('No repo set for this team yet.');
+  else if (v.status === 'error') alert('Could not reach that repo — is it public and spelled right?');
+  openEvent(cur.slug, curTab);
 }
 async function patchTeam(teamId, body) {
   const r = await fetch(`/api/admin/events/${cur.slug}/teams/${teamId}`, {

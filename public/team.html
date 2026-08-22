@@ -41,6 +41,13 @@
   .dot.idle { background: var(--gold); }
   .tag { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.15em;
          text-transform: uppercase; color: rgba(244,243,239,0.5); }
+  .ready { border: 1px solid; border-radius: 6px; padding: 10px 14px; margin: 14px 0;
+           font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.1em;
+           text-transform: uppercase; display: flex; gap: 16px; flex-wrap: wrap; }
+  .ready.ok { color: #4ade80; border-color: #4ade80; }
+  .ready.no { color: var(--gold); border-color: rgba(240,190,42,0.5); }
+  .ready .item.done { color: #4ade80; }
+  .ready .item.todo { color: var(--gold); }
 </style>
 </head>
 <body>
@@ -56,6 +63,7 @@
   <div>
     <h1 id="teamname"></h1>
     <div class="mono" id="repo"></div>
+    <div class="ready" id="ready" style="display:none"></div>
     <div class="stats">
       <div class="stat"><b id="laps">0</b><span>laps</span></div>
       <div class="stat"><b id="km">0.0</b><span>km</span></div>
@@ -80,6 +88,19 @@ async function tick() {
     document.getElementById('eventname').textContent = t.event;
     document.getElementById('teamname').textContent = t.team;
     document.getElementById('repo').textContent = t.repo ? t.repo.replace('https://github.com/', 'github.com/') : 'no repo connected yet';
+    const rd = t.readiness;
+    if (rd) {
+      const el = document.getElementById('ready');
+      el.style.display = '';
+      el.className = 'ready ' + (rd.ready ? 'ok' : 'no');
+      const item = (done, label) => `<span class="item ${done ? 'done' : 'todo'}">${done ? '✓' : '○'} ${label}</span>`;
+      el.innerHTML = rd.ready
+        ? `<b>READY TO RACE</b>` +
+          item(true, `${rd.members} runners`) + item(true, 'device connected') + item(true, 'github connected')
+        : item(rd.members >= rd.minMembers, `runners ${rd.members}/${rd.minMembers}`) +
+          item(rd.devicesConnected >= 1, 'device connected') +
+          item(rd.githubConnected, rd.repoSet ? 'github verified' : 'github repo');
+    }
     laps.textContent = t.laps; km.textContent = t.km.toFixed(1);
     commits.textContent = t.commits; score.textContent = t.score;
     document.getElementById('members').innerHTML = t.members.map((m) => {

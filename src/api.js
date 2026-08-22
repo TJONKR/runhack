@@ -75,7 +75,7 @@ router.get('/:slug/team/:teamId', async (req, res) => {
   const event = ev.rows[0];
   if (!event) return res.status(404).json({ error: 'no such event' });
   const t = await pool.query(
-    `SELECT id, name, repo_url, commit_count, commit_override, score_adjust, active_member_id
+    `SELECT id, name, repo_url, repo_status, commit_count, commit_override, score_adjust, active_member_id
        FROM teams WHERE id = $1 AND event_id = $2`,
     [req.params.teamId, event.id]
   );
@@ -110,6 +110,17 @@ router.get('/:slug/team/:teamId', async (req, res) => {
     laps,
     km,
     score: +(teamScore(km, commits, config) + Number(team.score_adjust || 0)).toFixed(2),
+    readiness: {
+      minMembers: config.minTeamSize,
+      members: members.rows.length,
+      devicesConnected: members.rows.filter((m) => m.activated_at).length,
+      githubConnected: team.repo_status === 'connected',
+      repoSet: !!team.repo_url,
+      ready:
+        members.rows.length >= config.minTeamSize &&
+        members.rows.some((m) => m.activated_at) &&
+        team.repo_status === 'connected',
+    },
     members: members.rows.map((m) => ({
       name: m.name,
       laps: Number(m.laps),

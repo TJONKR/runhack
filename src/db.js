@@ -73,6 +73,7 @@ export async function initDb() {
     ALTER TABLE teams ADD COLUMN IF NOT EXISTS commits_checked_at timestamptz;
     ALTER TABLE teams ADD COLUMN IF NOT EXISTS commit_override integer;
     ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_adjust real NOT NULL DEFAULT 0;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS repo_status text;
     ALTER TABLE laps ADD COLUMN IF NOT EXISTS manual boolean NOT NULL DEFAULT false;
     ALTER TABLE laps ALTER COLUMN member_id DROP NOT NULL;
   `);
@@ -110,6 +111,7 @@ export function eventConfig(event) {
     maxAccuracyM: c.maxAccuracyM ?? 40,
     scoreFormula: c.scoreFormula ?? 'km_x_commits',
     commitWeight: c.commitWeight ?? 0.1,
+    minTeamSize: c.minTeamSize ?? 3, // event rule: teams of 3/4
     zones: event.zones || [],
   };
 }

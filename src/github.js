@@ -15,7 +15,7 @@ export function parseRepo(input) {
   return m ? { owner: m[1], repo: m[2] } : null;
 }
 
-async function countCommits(repoUrl, sinceIso, untilIso) {
+export async function countCommits(repoUrl, sinceIso, untilIso) {
   const parsed = parseRepo(repoUrl);
   if (!parsed) return null;
   const params = new URLSearchParams({ per_page: '1' });
@@ -53,9 +53,11 @@ async function pollOnce() {
       const count = await countCommits(t.repo_url, since, until);
       if (count != null) {
         await pool.query(
-          'UPDATE teams SET commit_count = $1, commits_checked_at = now() WHERE id = $2',
+          "UPDATE teams SET commit_count = $1, commits_checked_at = now(), repo_status = 'connected' WHERE id = $2",
           [count, t.id]
         );
+      } else {
+        await pool.query("UPDATE teams SET repo_status = 'error' WHERE id = $1", [t.id]);
       }
     } catch (err) {
       console.error('github poll failed for team', t.id, err.message);

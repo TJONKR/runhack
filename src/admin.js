@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { pool } from './db.js';
+import { countCommits } from './github.js';
 
 const router = Router();
 
@@ -34,7 +35,8 @@ router.get('/events/:slug', async (req, res) => {
   if (!rows[0]) return res.status(404).json({ error: 'no such event' });
   const teams = await pool.query(
     `SELECT t.*,
-            (SELECT count(*) FROM members m WHERE m.team_id = t.id) AS member_count
+            (SELECT count(*) FROM members m WHERE m.team_id = t.id) AS member_count,
+            (SELECT count(*) FROM members m WHERE m.team_id = t.id AND m.activated_at IS NOT NULL) AS connected_count
        FROM teams t WHERE t.event_id = $1 ORDER BY t.name`,
     [rows[0].id]
   );
@@ -179,6 +181,7 @@ router.patch('/events/:slug/teams/:teamId', async (req, res) => {
   }
   if ('repoUrl' in req.body) {
     add('repo_url = ?', req.body.repoUrl || null);
+    add('repo_status = ?', null); // unknown until tested/polled again
     if (!req.body.repoUrl) add('commit_count = ?', 0);
   }
   if ('commitOverride' in req.body) {
@@ -196,6 +199,32 @@ router.patch('/events/:slug/teams/:teamId', async (req, res) => {
   );
   if (!rows[0]) return res.status(404).json({ error: 'no such team' });
   res.json(rows[0]);
+});
+
+// Test a team's GitHub connection right now: reachable, public, and counts
+// commits in the event window. Persists the verdict.
+router.post('/events/:slug/teams/:teamId/check-repo', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT t.id, t.repo_url, e.start_at, e.end_at, e.created_at
+       FROM teams t JOIN events e ON e.id = t.event_id
+      WHERE t.id = $1 AND e.slug = $2`,
+    [req.params.teamId, req.params.slug]
+  );
+  const t = rows[0];
+  if (!t) return res.status(404).json({ error: 'no such team' });
+  if (!t.repo_url) return res.json({ status: 'not_set' });
+  const since = (t.start_at || t.created_at)?.toISOString?.();
+  const until = t.end_at?.toISOString?.();
+  const count = await countCommits(t.repo_url, since, until).catch(() => null);
+  const status = count == null ? 'error' : 'connected';
+  await pool.query(
+    `UPDATE teams SET repo_status = $1,
+            commit_count = COALESCE($2, commit_count),
+            commits_checked_at = CASE WHEN $2 IS NULL THEN commits_checked_at ELSE now() END
+      WHERE id = $3`,
+    [status, count, t.id]
+  );
+  res.json({ status, commits: count });
 });
 
 // ---- Member surgery: everything a marshal might need to fix on the day ----
