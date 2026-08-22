@@ -75,7 +75,8 @@ router.get('/:slug/team/:teamId', async (req, res) => {
   const event = ev.rows[0];
   if (!event) return res.status(404).json({ error: 'no such event' });
   const t = await pool.query(
-    'SELECT id, name, repo_url, commit_count, active_member_id FROM teams WHERE id = $1 AND event_id = $2',
+    `SELECT id, name, repo_url, commit_count, commit_override, score_adjust, active_member_id
+       FROM teams WHERE id = $1 AND event_id = $2`,
     [req.params.teamId, event.id]
   );
   const team = t.rows[0];
@@ -97,6 +98,7 @@ router.get('/:slug/team/:teamId', async (req, res) => {
   const config = eventConfig(event);
   const laps = Number(lapAgg.rows[0].valid);
   const km = +((laps * config.lapM) / 1000).toFixed(2);
+  const commits = team.commit_override ?? (Number(team.commit_count) || 0);
   res.json({
     event: event.name,
     slug: event.slug,
@@ -104,10 +106,10 @@ router.get('/:slug/team/:teamId', async (req, res) => {
     team: team.name,
     teamId: team.id,
     repo: team.repo_url || null,
-    commits: Number(team.commit_count) || 0,
+    commits,
     laps,
     km,
-    score: teamScore(km, Number(team.commit_count) || 0, config),
+    score: +(teamScore(km, commits, config) + Number(team.score_adjust || 0)).toFixed(2),
     members: members.rows.map((m) => ({
       name: m.name,
       laps: Number(m.laps),
@@ -127,7 +129,7 @@ router.get('/:slug/board', async (req, res) => {
   const config = eventConfig(event);
 
   const teams = await pool.query(
-    `SELECT t.id, t.name, t.repo_url, t.commit_count,
+    `SELECT t.id, t.name, t.repo_url, t.commit_count, t.commit_override, t.score_adjust,
             am.name AS runner_name, am.last_fix AS runner_last_fix,
             ll.seconds AS last_lap_s, ll.counted AS last_lap_valid, ll.reject_reason AS last_lap_reason,
             COALESCE(l.valid, 0) AS valid_laps, COALESCE(l.invalid, 0) AS invalid_laps
@@ -151,7 +153,7 @@ router.get('/:slug/board', async (req, res) => {
     .map((t) => {
       const laps = Number(t.valid_laps);
       const km = +((laps * config.lapM) / 1000).toFixed(2);
-      const commits = Number(t.commit_count) || 0;
+      const commits = t.commit_override ?? (Number(t.commit_count) || 0);
       const lastFixAgoS = t.runner_last_fix?.at
         ? Math.round((Date.now() - t.runner_last_fix.at) / 1000)
         : null;
@@ -167,7 +169,7 @@ router.get('/:slug/board', async (req, res) => {
         km,
         commits,
         repo: t.repo_url || null,
-        score: teamScore(km, commits, config),
+        score: +(teamScore(km, commits, config) + Number(t.score_adjust || 0)).toFixed(2),
         lastLap: t.last_lap_s != null
           ? { seconds: Math.round(t.last_lap_s), valid: t.last_lap_valid, reason: t.last_lap_reason }
           : null,

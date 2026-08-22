@@ -91,6 +91,12 @@
     <label class="muted">exit fixes <input type="number" id="cfgExit" value="2"></label>
     <label class="muted">starts <input type="datetime-local" id="evStart"></label>
     <label class="muted">ends <input type="datetime-local" id="evEnd"></label>
+    <label class="muted">score formula
+      <select id="cfgFormula">
+        <option value="km_x_commits">km × commits</option>
+        <option value="km_plus_commits">km + commits × weight</option>
+      </select></label>
+    <label class="muted">commit weight <input type="number" id="cfgWeight" value="0.1" step="0.05"></label>
   </div>
   <p class="muted">Laps outside start–end are recorded but invalid. Commits count from start.
     Dev tip: for a walkable test event set min lap ~10 and max lap ~1200.</p>
@@ -102,8 +108,14 @@
     <button id="pauseBtn" onclick="control('pause')">⏸ Pause</button>
     <button onclick="control('end_now')">■ End now</button>
   </div>
-  <button onclick="resetRace()" style="border-color:#DD6A24;color:#DD6A24">⚠ Reset race data</button>
-  <span class="muted">wipes laps + runners, keeps event/teams/repos</span>
+  <div class="team-row">
+    <button onclick="resetRace()" style="border-color:#DD6A24;color:#DD6A24">⚠ Reset race data</button>
+    <span class="muted" style="flex:1">wipes laps + runners, keeps event/teams/repos</span>
+  </div>
+  <div class="team-row">
+    <button onclick="deleteEvent()" style="border-color:#DD6A24;color:#DD6A24">⚠ Delete event</button>
+    <span class="muted" style="flex:1">removes this event and everything under it</span>
+  </div>
 
   <h2>Zones <span style="color:rgba(244,243,239,0.4)">(lap order · zone 0 = start/finish)</span></h2>
   <div id="drawing-banner">Click map corners, then Finish zone.</div>
@@ -254,6 +266,7 @@ async function loadEvent(slug) {
   cfgLapM.value = c.lapM ?? 400; cfgAcc.value = c.maxAccuracyM ?? 40;
   cfgMin.value = c.minLapS ?? 55; cfgMax.value = c.maxLapS ?? 168;
   cfgEntry.value = c.entryFixes ?? 1; cfgExit.value = c.exitFixes ?? 2;
+  cfgFormula.value = c.scoreFormula ?? 'km_x_commits'; cfgWeight.value = c.commitWeight ?? 0.1;
   evStart.value = toLocalInput(e.start_at); evEnd.value = toLocalInput(e.end_at);
   zones = e.zones || [];
   redrawZones();
@@ -281,26 +294,88 @@ async function saveEvent() {
       lapM: +cfgLapM.value, maxAccuracyM: +cfgAcc.value,
       minLapS: +cfgMin.value, maxLapS: +cfgMax.value,
       entryFixes: +cfgEntry.value, exitFixes: +cfgExit.value,
+      scoreFormula: cfgFormula.value, commitWeight: +cfgWeight.value,
     },
   };
   const r = await fetch('/api/admin/events', { method: 'POST', headers: H(), body: JSON.stringify(body) });
   document.getElementById('saveMsg').textContent = r.ok ? 'saved ✓' : 'failed: ' + (await r.text());
   if (r.ok) { await loadEvents(); eventSelect.value = slug; renderLinks(slug); loadEvent(slug); }
 }
+let lastTeams = [];
+function copyText(text, btn) {
+  navigator.clipboard?.writeText(text).then(
+    () => { if (btn) { const o = btn.textContent; btn.textContent = '✓'; setTimeout(() => (btn.textContent = o), 900); } },
+    () => prompt('Copy:', text)
+  ) || prompt('Copy:', text);
+}
 function renderTeams(teams) {
+  lastTeams = teams;
+  const slug = evSlug.value.trim();
   const el = document.getElementById('teamList');
-  el.innerHTML = teams.map((t) =>
-    `<div class="team-row"><span style="flex:1"><b>${t.name}</b> <span class="muted">(${t.member_count} joins · ${t.commit_count ?? 0} commits)</span></span>
-     <a href="/${evSlug.value.trim()}/team/${t.id}" target="_blank"><button title="team page + QR">QR</button></a>
-     <button onclick="addLap(${t.id})" title="manually credit a lap">+lap</button>
+  el.innerHTML = teams.map((t) => {
+    const commits = t.commit_override ?? t.commit_count ?? 0;
+    const ovr = t.commit_override != null ? ` <span style="color:#F0BE2A">(override)</span>` : '';
+    const adj = Number(t.score_adjust) ? ` · adj ${t.score_adjust > 0 ? '+' : ''}${t.score_adjust}` : '';
+    return `<div class="team-row"><span style="flex:1"><b>${t.name}</b>
+       <span class="muted">#${t.id} · ${t.member_count} joins · ${commits} commits${ovr}${adj}</span></span>
+     <a href="/${slug}/team/${t.id}" target="_blank"><button title="team page + QR">QR</button></a>
+     <button onclick="addLap(${t.id})" title="manually credit laps">+lap</button>
      <button onclick="toggleLaps(${t.id})" title="review laps">laps</button>
+     <button onclick="toggleManage(${t.id})" title="rename, overrides, links, ids">⚙</button>
      <button onclick="delTeam(${t.id})">✕</button></div>
      <div class="team-row"><input type="text" placeholder="github repo url" value="${t.repo_url || ''}"
        onchange="setRepo(${t.id}, this.value)" style="flex:1;font-size:12px"></div>
-     <div id="laps-${t.id}" style="display:none;margin:4px 0 10px;padding-left:8px;border-left:2px solid var(--line)"></div>`).join('') ||
-    '<div class="muted">none yet</div>';
+     <div id="manage-${t.id}" style="display:none;margin:4px 0 10px;padding-left:8px;border-left:2px solid var(--line)"></div>
+     <div id="laps-${t.id}" style="display:none;margin:4px 0 10px;padding-left:8px;border-left:2px solid var(--line)"></div>`;
+  }).join('') || '<div class="muted">none yet</div>';
   const sim = document.getElementById('simTeam');
   sim.innerHTML = teams.map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
+}
+
+function toggleManage(teamId) {
+  const panel = document.getElementById(`manage-${teamId}`);
+  if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+  const t = lastTeams.find((x) => x.id === teamId);
+  const slug = evSlug.value.trim();
+  const join = `${location.origin}/${slug}/join?team=${teamId}`;
+  const page = `${location.origin}/${slug}/team/${teamId}`;
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div class="team-row" style="font-size:12px"><span class="muted" style="flex:1">team id: <b>${teamId}</b></span>
+      <button onclick="copyText('${teamId}', this)">copy id</button>
+      <button onclick="copyText('${join}', this)">copy join link</button>
+      <button onclick="copyText('${page}', this)">copy team page</button></div>
+    <div class="team-row" style="font-size:12px">
+      <button onclick="renameTeam(${teamId})">rename</button>
+      <button onclick="overrideCommits(${teamId})" title="manual commit count if GitHub is wrong/down; blank = back to auto">override commits</button>
+      <button onclick="adjustScore(${teamId})" title="flat bonus/penalty added to the score">score adjust</button>
+    </div>`;
+}
+async function patchTeam(teamId, body) {
+  const r = await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${teamId}`, {
+    method: 'PATCH', headers: H(), body: JSON.stringify(body),
+  });
+  if (!r.ok) alert('failed: ' + (await r.text()));
+  loadEvent(evSlug.value.trim());
+}
+function renameTeam(teamId) {
+  const t = lastTeams.find((x) => x.id === teamId);
+  const name = prompt('New team name:', t?.name || '');
+  if (name?.trim()) patchTeam(teamId, { name });
+}
+function overrideCommits(teamId) {
+  const t = lastTeams.find((x) => x.id === teamId);
+  const v = prompt('Manual commit count (leave blank to return to GitHub auto-count):',
+    t?.commit_override ?? '');
+  if (v === null) return;
+  patchTeam(teamId, { commitOverride: v.trim() === '' ? null : +v });
+}
+function adjustScore(teamId) {
+  const t = lastTeams.find((x) => x.id === teamId);
+  const v = prompt('Score adjustment (+bonus / -penalty, added to the computed score):',
+    t?.score_adjust ?? 0);
+  if (v === null) return;
+  patchTeam(teamId, { scoreAdjust: +v });
 }
 
 // ---- Race lifecycle + lap management ----
@@ -318,6 +393,13 @@ async function resetRace() {
   await fetch(`/api/admin/events/${slug}/reset`, { method: 'POST', headers: H() });
   loadEvent(slug);
 }
+async function deleteEvent() {
+  const slug = evSlug.value.trim();
+  if (prompt(`Delete event "${slug}" and ALL its teams, runners and laps?\nType the slug to confirm:`) !== slug) return;
+  await fetch(`/api/admin/events/${slug}`, { method: 'DELETE', headers: H() });
+  evSlug.value = ''; evName.value = ''; zones = []; redrawZones(); renderTeams([]);
+  await loadEvents();
+}
 function renderRaceStatus(e) {
   const now = Date.now();
   const start = e.start_at ? new Date(e.start_at).getTime() : null;
@@ -333,10 +415,12 @@ function renderRaceStatus(e) {
   pb.onclick = () => control(e.paused_at ? 'resume' : 'pause');
 }
 async function addLap(teamId) {
+  const count = prompt('How many laps to credit?', '1');
+  if (count === null) return;
   const seconds = prompt('Lap time in seconds (for the board’s last-lap display):', '120');
   if (seconds === null) return;
   await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${teamId}/laps`, {
-    method: 'POST', headers: H(), body: JSON.stringify({ seconds: +seconds }),
+    method: 'POST', headers: H(), body: JSON.stringify({ count: +count, seconds: +seconds }),
   });
   loadEvent(evSlug.value.trim());
 }
@@ -368,16 +452,51 @@ async function loadRoster() {
       : m.lastPingAgoS <= 15 ? `<span style="color:#4ade80">ping ${m.lastPingAgoS}s</span>`
       : `ping ${m.lastPingAgoS}s`;
     const state = m.frozen_at ? 'frozen' : m.is_active ? '<b style="color:#4ade80">active</b>' : m.activated_at ? 'was active' : 'joined';
-    return `<div class="team-row" style="font-size:12px">
-      <span style="flex:1">${m.team} · <b>${m.name}</b> · ${state} · ${m.lap_count} laps · ${ping}</span>
-      ${m.frozen_at ? '' : `<button onclick="freezeMember(${m.id})" title="force-stop this runner's tracking">freeze</button>`}
+    const traccar = `org.traccar.client://config?url=${encodeURIComponent(location.origin + '/ingest/' + m.user_id)}&id=${m.user_id}&accuracy=highest&interval=2&distance=0`;
+    return `<div class="team-row" style="font-size:11px;flex-wrap:wrap">
+      <span style="flex:1;min-width:180px">${m.team} · <b>${m.name}</b> <span class="muted">#${m.id}</span> · ${state} · ${m.lap_count} laps · ${ping}</span>
+      <button onclick="copyText('${traccar}', this)" title="copy the Traccar config link — open it on the runner's phone to (re)connect it">cfg</button>
+      <button onclick="renameMember(${m.id}, '${m.name.replace(/'/g, "\\'")}')" title="fix a typo'd name">rename</button>
+      <button onclick="moveMember(${m.id})" title="move to another team (laps go too)">move</button>
+      ${m.is_active && !m.frozen_at ? '' : `<button onclick="activateMember(${m.id})" title="make this the team's live runner">activate</button>`}
+      ${m.frozen_at
+        ? `<button onclick="unfreezeMember(${m.id})" title="undo a freeze">unfreeze</button>`
+        : `<button onclick="freezeMember(${m.id})" title="force-stop this runner's tracking">freeze</button>`}
+      <button onclick="resetMemberState(${m.id})" title="clear a stuck lap state machine (laps survive)">reset</button>
+      <button onclick="deleteMember(${m.id}, '${m.name.replace(/'/g, "\\'")}')" title="remove a mis-join (team keeps its laps)">✕</button>
     </div>`;
   }).join('') || '<span class="muted">nobody yet</span>';
 }
-async function freezeMember(id) {
-  await fetch(`/api/admin/members/${id}/freeze`, { method: 'POST', headers: H() });
-  loadRoster();
+async function memberAction(id, action, method = 'POST', body) {
+  const r = await fetch(`/api/admin/members/${id}${action}`, {
+    method, headers: H(), body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) alert('failed: ' + (await r.text()));
+  loadRoster(); loadEvent(evSlug.value.trim());
 }
+const freezeMember = (id) => memberAction(id, '/freeze');
+const unfreezeMember = (id) => memberAction(id, '/unfreeze');
+const resetMemberState = (id) => memberAction(id, '/reset-state');
+function activateMember(id) {
+  if (confirm('Make this member the team\'s live runner? The current one gets frozen.'))
+    memberAction(id, '/activate');
+}
+function renameMember(id, current) {
+  const name = prompt('New runner name:', current);
+  if (name?.trim()) memberAction(id, '', 'PATCH', { name });
+}
+function moveMember(id) {
+  const list = lastTeams.map((t) => `${t.id} = ${t.name}`).join('\n');
+  const v = prompt(`Move to which team? Enter a team id:\n${list}`);
+  if (v === null || !v.trim()) return;
+  memberAction(id, '', 'PATCH', { teamId: +v, moveLaps: true });
+}
+function deleteMember(id, name) {
+  if (confirm(`Remove "${name}"? Their laps stay with the team, unattributed.`))
+    memberAction(id, '', 'DELETE');
+}
+// Keep the roster live while race control is open.
+setInterval(() => { if (evSlug.value.trim() && !document.hidden) loadRoster(); }, 5000);
 async function setRepo(teamId, repoUrl) {
   await fetch(`/api/admin/events/${evSlug.value.trim()}/teams/${teamId}`, {
     method: 'PATCH', headers: H(), body: JSON.stringify({ repoUrl }),
