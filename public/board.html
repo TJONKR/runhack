@@ -77,8 +77,9 @@
     .gun-cell b { font-size: 18px; }
     .gun-cell span { font-size: 8px; }
     .gun-label { font-size: 9px; margin-right: 4px; }
-    .rulebar { padding: 6px 14px; font-size: 9px; gap: 4px; }
+    .rulebar { padding: 6px 14px; font-size: 9px; gap: 4px; flex-wrap: nowrap; }
     .pacerule { display: none; }
+    .ryb { display: none; }
     table { font-size: 15px; }
     th, td { padding: 8px 5px; }
     td.rank { width: 22px; }
@@ -170,8 +171,8 @@ async function tick() {
     lastFetchOkAt = Date.now();
     clockSkewMs = new Date(board.serverNow).getTime() - Date.now();
     document.getElementById('eventname').textContent = board.event;
-    document.getElementById('scoreRule').textContent =
-      'You run. You build. Score = ' +
+    document.getElementById('scoreRule').innerHTML =
+      '<span class="ryb">You run. You build. </span>Score = ' +
       (board.scoreFormula === 'km_plus_commits' ? 'km + weighted commits.' : 'km x commits.');
     renderState();
     document.getElementById('rows').innerHTML = board.teams.map((t, i) => {
@@ -236,7 +237,8 @@ function renderUpdated() {
   const el = document.getElementById('updated');
   if (!lastFetchOkAt) { el.textContent = 'Connecting…'; return; }
   const ago = Math.round((Date.now() - lastFetchOkAt) / 1000);
-  el.textContent = `Updated ${ago <= 3 ? 'just now' : ago + 's ago'}`;
+  const t = ago < 90 ? `${ago}s` : `${Math.round(ago / 60)}m`;
+  el.textContent = ago <= 3 ? '✓ live' : ago > 20 ? `⚠ ${t}` : `✓ ${t}`;
   el.classList.toggle('stale', ago > 20);
 }
 
