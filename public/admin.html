@@ -197,6 +197,12 @@
                 <option value="km_plus_commits">km + commits × weight</option>
               </select></label>
             <label class="muted">commit weight <input type="number" id="cfgWeight" value="0.1" step="0.05"></label>
+            <label class="muted" title="all three timings are recorded on every lap — this picks which one scores. exit→entry: window over the timed segment. gate / entry→entry: window over full lap metres.">official timing
+              <select id="cfgOfficial">
+                <option value="exit_entry">start-box exit → entry</option>
+                <option value="gate">timing gate (needs gate on map)</option>
+                <option value="entry_entry">box entry → entry</option>
+              </select></label>
           </div>
           <p class="muted">Laps are timed from leaving the start box to returning, so min/max lap s
             apply to the <b>timed segment</b> (≈ lap − start box; 7:00/km over 350m = 147s).
@@ -464,6 +470,7 @@ function renderSetup() {
   cfgMin.value = c.minLapS ?? 48; cfgMax.value = c.maxLapS ?? 147;
   cfgEntry.value = c.entryFixes ?? 1; cfgExit.value = c.exitFixes ?? 2;
   cfgFormula.value = c.scoreFormula ?? 'km_x_commits'; cfgWeight.value = c.commitWeight ?? 0.1;
+  cfgOfficial.value = c.officialTiming ?? 'exit_entry';
   evStart.value = toLocalInput(cur.start_at); evEnd.value = toLocalInput(cur.end_at);
   document.getElementById('raceStatus').innerHTML =
     `status: <b style="color:${statusColour[statusOf(cur)]}">${statusOf(cur)}</b>`;
@@ -484,11 +491,13 @@ async function saveEvent() {
     startAt: evStart.value ? new Date(evStart.value).toISOString() : null,
     endAt: evEnd.value ? new Date(evEnd.value).toISOString() : null,
     config: {
+      ...(cur.config || {}), // keep keys the form doesn't own (gate, minTeamSize)
       lapM: +cfgLapM.value, maxAccuracyM: +cfgAcc.value,
       timedSegmentM: +cfgSegment.value,
       minLapS: +cfgMin.value, maxLapS: +cfgMax.value,
       entryFixes: +cfgEntry.value, exitFixes: +cfgExit.value,
       scoreFormula: cfgFormula.value, commitWeight: +cfgWeight.value,
+      officialTiming: cfgOfficial.value,
     },
   };
   const r = await fetch('/api/admin/events', { method: 'POST', headers: H(), body: JSON.stringify(body) });

@@ -186,7 +186,8 @@ router.get('/:slug/board', async (req, res) => {
           : null,
         paceSPerKm:
           t.last_lap_s != null && t.last_lap_valid
-            ? Math.round(t.last_lap_s / (config.timedSegmentM / 1000))
+            ? Math.round(t.last_lap_s /
+                ((config.officialTiming === 'exit_entry' ? config.timedSegmentM : config.lapM) / 1000))
             : null,
         lastPingAgoS: lastFixAgoS,
       };

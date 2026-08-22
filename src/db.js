@@ -119,6 +119,10 @@ export function eventConfig(event) {
     commitWeight: c.commitWeight ?? 0.1,
     minTeamSize: c.minTeamSize ?? 3, // event rule: teams of 3/4
     gate: c.gate ?? null, // [[lat,lng],[lat,lng]] timing line inside the start box
+    // Which timing scores laps: 'exit_entry' (box timing, window over the
+    // timed segment), 'gate' or 'entry_entry' (full lap, window over lapM).
+    // All three are recorded regardless; this only picks the official one.
+    officialTiming: c.officialTiming ?? 'exit_entry',
     zones: event.zones || [],
   };
 }

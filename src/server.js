@@ -46,6 +46,7 @@ app.get('/qr.svg', async (req, res) => {
   );
 });
 
+app.get('/', (req, res) => res.redirect('/admin'));
 app.get('/admin', (req, res) => res.sendFile(path.join(publicDir, 'admin.html')));
 app.get('/:slug/join', (req, res) => res.sendFile(path.join(publicDir, 'join.html')));
 app.get('/:slug/board', (req, res) => res.sendFile(path.join(publicDir, 'board.html')));

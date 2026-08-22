@@ -106,6 +106,22 @@ export async function ingestHandler(req, res) {
   const state = member.state && member.state.nextZone !== undefined ? member.state : createState();
   const { state: newState, events } = processFix(state, fix, config);
 
+  // Official timing selection: 'entry_entry' swaps the scored seconds to the
+  // full-lap entry-to-entry measurement before validation. ('gate' is applied
+  // when the crossing arrives, below.)
+  if (config.officialTiming === 'entry_entry') {
+    for (const ev of events) {
+      if (ev.type === 'lap' && ev.entrySeconds != null) {
+        const wasCounted = ev.counted;
+        ev.seconds = ev.entrySeconds;
+        ev.counted = ev.seconds >= config.minLapS && ev.seconds <= config.maxLapS;
+        ev.reason = ev.counted ? null : ev.seconds < config.minLapS ? 'too_fast' : 'too_slow';
+        newState.lapCount += (ev.counted ? 1 : 0) - (wasCounted ? 1 : 0);
+        if (ev.counted) newState.lastLapS = ev.seconds;
+      }
+    }
+  }
+
   // Laps finished outside the event window are recorded but invalid — useful
   // for pre-start warmups and system checks without polluting the board.
   const startMs = member.start_at ? new Date(member.start_at).getTime() : null;
@@ -137,13 +153,29 @@ export async function ingestHandler(req, res) {
   }
   for (const ev of events) {
     if (ev.type === 'gate_lap') {
-      await pool.query(
-        `UPDATE laps SET gate_seconds = $1
-          WHERE id = (SELECT id FROM laps WHERE member_id = $2
-                       AND finished_at > now() - interval '45 seconds'
-                      ORDER BY finished_at DESC LIMIT 1)`,
-        [ev.seconds, member.id]
+      const { rows: recent } = await pool.query(
+        `SELECT id, counted, reject_reason, manual FROM laps
+          WHERE member_id = $1 AND finished_at > now() - interval '45 seconds'
+          ORDER BY finished_at DESC LIMIT 1`,
+        [member.id]
       );
+      const lap = recent[0];
+      if (!lap) continue;
+      await pool.query('UPDATE laps SET gate_seconds = $1 WHERE id = $2', [ev.seconds, lap.id]);
+      // Gate as official timing: the crossing time replaces the scored
+      // seconds — but never overrides window/pause/admin verdicts.
+      if (
+        config.officialTiming === 'gate' && !lap.manual &&
+        (lap.reject_reason == null || ['too_fast', 'too_slow'].includes(lap.reject_reason))
+      ) {
+        const counted = ev.seconds >= config.minLapS && ev.seconds <= config.maxLapS;
+        const reason = counted ? null : ev.seconds < config.minLapS ? 'too_fast' : 'too_slow';
+        await pool.query('UPDATE laps SET seconds = $1, counted = $2, reject_reason = $3 WHERE id = $4', [
+          ev.seconds, counted, reason, lap.id,
+        ]);
+        newState.lapCount += (counted ? 1 : 0) - (lap.counted ? 1 : 0);
+        if (counted) newState.lastLapS = ev.seconds;
+      }
     }
   }
 
