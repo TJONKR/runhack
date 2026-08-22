@@ -61,6 +61,37 @@
   .lap-valid { color: #4ade80; } .lap-invalid { color: var(--orange); }
   tr.rowlink { cursor: pointer; }
   tr.rowlink:hover td { background: rgba(244,243,239,0.04); }
+
+  /* phones: rank · team · runner · laps · km · score; commits + lap detail
+     live on the team page a tap away */
+  @media (max-width: 760px) {
+    header { padding: 10px 14px; gap: 10px; }
+    .wordmark { font-size: 22px; letter-spacing: -1px; }
+    .powered { margin-top: 3px; }
+    .powered img { height: 10px; }
+    .eventname { display: none; }
+    .gun-cell { min-width: 44px; padding: 3px 7px; }
+    .gun-cell b { font-size: 18px; }
+    .gun-cell span { font-size: 8px; }
+    .gun-label { font-size: 9px; margin-right: 4px; }
+    .rulebar { padding: 6px 14px; font-size: 9px; gap: 4px; }
+    table { font-size: 15px; }
+    th, td { padding: 8px 5px; }
+    td.rank { width: 22px; }
+    .runner { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+              display: inline-block; vertical-align: middle; }
+    th:nth-child(6), td:nth-child(6),
+    th:nth-child(8), td:nth-child(8),
+    th:nth-child(9), td:nth-child(9) { display: none; }
+    td.score { font-size: 16px; }
+    .runner { font-size: 12px; max-width: 56px; overflow: hidden; text-overflow: ellipsis;
+              white-space: nowrap; display: inline-block; vertical-align: middle; }
+    td.team { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    td.team .commitline { max-width: 32vw; font-size: 9px; }
+    #state { padding: 44px 16px 20px; }
+    #state .big { font-size: 28px; }
+    #state .sub { font-size: 10px; }
+  }
   .lap-reason { font-family: 'Geist Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
                 color: rgba(244,243,239,0.4); display: block; }
   .commitline { display: block; font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 400;
@@ -217,15 +248,17 @@ function renderGun() {
     gun.innerHTML = '<div class="gun-cell gun-final"><b>PAUSED</b><span>hold</span></div>';
     return;
   }
-  if (start && now < start) { label.textContent = 'Starting gun'; target = start; }
+  let countUp = false;
+  if (start && now < start) { label.textContent = 'Starts in'; target = start; }
   else if (end && now < end) { label.textContent = 'Time left'; target = end; }
   else if (end) {
     label.textContent = '';
-    gun.innerHTML = '<div class="gun-cell gun-final"><b>FINAL</b><span>race over</span></div>';
+    gun.innerHTML = '<div class="gun-cell gun-final"><b>FINISHED</b><span>race over</span></div>';
     return;
-  } else { label.textContent = 'Race is live'; gun.innerHTML = ''; return; }
+  } else if (start) { label.textContent = 'Elapsed'; target = start; countUp = true; }
+  else { label.textContent = 'Race is live'; gun.innerHTML = ''; return; }
 
-  let s = Math.max(0, Math.floor((target - now) / 1000));
+  let s = Math.max(0, Math.floor((countUp ? now - target : target - now) / 1000));
   const parts = [['days', 86400], ['hrs', 3600], ['min', 60], ['sec', 1]].map(([u, div]) => {
     const v = Math.floor(s / div); s -= v * div; return [u, v];
   }).filter(([u, v], i, a) => v > 0 || u === 'sec' || a.slice(0, i).some(([, pv]) => pv > 0));

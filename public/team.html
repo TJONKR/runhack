@@ -24,7 +24,16 @@
   main { max-width: 900px; margin: 0 auto; padding: 28px 24px; display: grid;
          grid-template-columns: 300px 1fr; gap: 36px; }
   main > div { min-width: 0; } /* let the stats column shrink; nowrap children ellipsize instead of overflowing */
-  @media (max-width: 720px) { main { grid-template-columns: 1fr; } }
+  @media (max-width: 720px) {
+    main { grid-template-columns: 1fr; gap: 22px; padding: 20px 16px; }
+    h1 { font-size: 30px; }
+    .qr { max-width: 250px; margin: 0 auto; }
+    .qr-label, #copyJoin { max-width: 278px; margin-left: auto; margin-right: auto; }
+    #copyJoin { display: block; }
+    .stat { padding: 8px 12px; min-width: 76px; }
+    .stat b { font-size: 20px; }
+  }
+  .member { flex-wrap: wrap; }
   h1 { font-size: 40px; font-weight: 900; letter-spacing: -1px; margin: 0 0 4px; }
   .mono { font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.15em;
           text-transform: uppercase; color: rgba(244,243,239,0.5); }
