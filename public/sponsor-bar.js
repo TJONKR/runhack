@@ -30,6 +30,10 @@
                           animation: sponsor-marquee 120s linear infinite; }
     #sponsor-bar img { height: var(--sb-h); width: auto; display: block; opacity: 0.8; }
     #sponsor-bar img.partner { filter: brightness(0) invert(1); }
+    #sponsor-bar .sb-rh { font-family: 'Geist', system-ui, sans-serif; font-weight: 900;
+                   font-size: calc(var(--sb-h) * 1.34); line-height: 1; letter-spacing: -0.04em;
+                   color: #F4F3EF; opacity: 0.85; white-space: nowrap; }
+    #sponsor-bar .sb-rh i { font-style: normal; color: #DD6A24; }
     @media (max-width: 760px) {
       #sponsor-bar { --sb-h: 15px; padding: 7px 0 8px; }
       #sponsor-bar .strip { gap: 34px; }
@@ -47,6 +51,9 @@
     try {
       const files = await (await fetch('/api/brands')).json();
       const img = (f, cls = '') => {
+        // The RUN/HACK anchor renders as live text in the brand font — its
+        // hand-made SVG had loose bounds and depended on system fonts.
+        if (f.includes('01-runhack')) return `<span class="sb-rh">RUN<i>/</i>HACK</span>`;
         const s = scaleFor(f);
         const st = s !== 1 ? ` style="height:calc(var(--sb-h) * ${s})"` : '';
         return `<img src="${f}" alt=""${cls ? ` class="${cls}"` : ''}${st}>`;
