@@ -9,13 +9,14 @@
 (function () {
   const SPEED_PX_S = 30;
 
-  // Optical size correction: the image files are tight-cropped, but logo
-  // DESIGNS carry different visual weight at equal pixel height — chunky
-  // lowercase wordmarks read big, square icon marks read small. Multipliers
-  // are eyeballed so all marks look the same height.
+  // Optical size correction: per-logo multipliers so all marks READ the same
+  // height. Ratios lifted from therunninghackathon.com's own partner bar
+  // (their hand-tuned pixel heights, normalised to roxfit = 1.0).
   const SCALES = {
-    healf: 0.72, poke: 0.8, perfectted: 0.85, tavily: 0.9,
-    ame: 1.2, 'unicorn-mafia': 1.2, cognition: 0.95,
+    healf: 1.17, cognition: 1.0, poke: 0.94, elevenlabs: 0.78,
+    'wispr-flow': 0.89, tavily: 1.06, ame: 1.44, perfectted: 1.44,
+    pitchless: 1.0, 'unicorn-mafia': 1.56, deepline: 1.0, delfa: 1.0,
+    algosoup: 0.94, thrad: 1.89,
   };
   const scaleFor = (f) => {
     for (const k in SCALES) if (f.includes(k)) return SCALES[k];
