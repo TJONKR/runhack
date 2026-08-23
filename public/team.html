@@ -169,7 +169,7 @@ async function tick() {
       const tag = d.active ? (stale ? 'active · signal lost' : `tracking · ping ${d.lastPingAgoS}s`)
         : d.connected ? (stale ? 'standby · quiet' : 'standby') : 'never pinged';
       const btn = d.active ? '' :
-        `<button onclick="makeActive('${d.token}')" style="font-family:'Geist Mono',monospace;font-size:9px;
+        `<button onclick="makeActive(${d.id})" style="font-family:'Geist Mono',monospace;font-size:9px;
            letter-spacing:0.12em;text-transform:uppercase;background:transparent;color:var(--gold);
            border:1px solid rgba(240,190,42,0.5);border-radius:4px;padding:5px 10px;cursor:pointer">Make active</button>`;
       return `<div class="member"><span class="dot ${cls}"></span>
@@ -178,8 +178,8 @@ async function tick() {
     }).join('') || '<div class="tag">No devices yet — set one up from the join page</div>';
   } catch {}
 }
-async function makeActive(token) {
-  await fetch(`/api/device/${token}/activate`, { method: 'POST' });
+async function makeActive(id) {
+  await fetch(`/api/devices/${id}/activate`, { method: 'POST' });
   tick();
 }
 setInterval(tick, 3000);

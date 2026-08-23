@@ -60,7 +60,11 @@ router.post('/events/:slug/teams', async (req, res) => {
 router.post('/events/:slug/control', async (req, res) => {
   const { action } = req.body;
   const sql = {
-    start_now: 'UPDATE events SET start_at = now(), paused_at = NULL WHERE slug = $1 RETURNING *',
+    // start_now also clears an already-elapsed end time, so it can restart an
+    // event that was ended by mistake (a future end time is kept).
+    start_now: `UPDATE events SET start_at = now(), paused_at = NULL,
+                end_at = CASE WHEN end_at <= now() THEN NULL ELSE end_at END
+                WHERE slug = $1 RETURNING *`,
     end_now: 'UPDATE events SET end_at = now(), paused_at = NULL WHERE slug = $1 RETURNING *',
     pause: 'UPDATE events SET paused_at = now() WHERE slug = $1 RETURNING *',
     resume: 'UPDATE events SET paused_at = NULL WHERE slug = $1 RETURNING *',

@@ -5,6 +5,21 @@ import { parseRepo } from './github.js';
 
 const router = Router();
 
+// Light per-IP limit on the public write endpoints (member/device creation,
+// device activation) — enough to stop scripted spam without touching real use.
+const writeBuckets = new Map();
+function publicWriteLimit(req, res, next) {
+  const ip = req.ip || 'unknown';
+  const now = Date.now();
+  let b = writeBuckets.get(ip);
+  if (!b || now - b.start > 60_000) {
+    b = { start: now, count: 0 };
+    writeBuckets.set(ip, b);
+  }
+  if (++b.count > 30) return res.status(429).json({ error: 'slow down' });
+  next();
+}
+
 // Public list of events for the landing page. Events with config.unlisted
 // stay off it (dev/test events) but their direct URLs still work.
 router.get('/events', async (req, res) => {
@@ -39,7 +54,7 @@ router.get('/:slug/info', async (req, res) => {
 });
 
 // Register a person on a team (once — devices are registered separately).
-router.post('/:slug/members', async (req, res) => {
+router.post('/:slug/members', publicWriteLimit, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM events WHERE slug = $1', [req.params.slug]);
   const event = rows[0];
   if (!event) return res.status(404).json({ error: 'no such event' });
@@ -73,7 +88,7 @@ router.post('/:slug/members', async (req, res) => {
 // Register a tracking device for a team, optionally linked to a person.
 // Returns the token that becomes Traccar's device identifier — pings with it
 // map back to team (+ person) server-side.
-router.post('/:slug/devices', async (req, res) => {
+router.post('/:slug/devices', publicWriteLimit, async (req, res) => {
   const { rows } = await pool.query('SELECT id FROM events WHERE slug = $1', [req.params.slug]);
   const event = rows[0];
   if (!event) return res.status(404).json({ error: 'no such event' });
@@ -110,9 +125,11 @@ router.get('/device/:token/status', async (req, res) => {
 });
 
 // Make a device the team's scoring tracker (used at multi-phone handovers).
-router.post('/device/:token/activate', async (req, res) => {
-  const { rows } = await pool.query('SELECT id, team_id FROM devices WHERE token = $1', [req.params.token]);
-  if (!rows[0]) return res.status(404).json({ error: 'unknown id' });
+// Takes the device id, not the token: switching trackers is a visible,
+// reversible action, but the token must stay ingest-only.
+router.post('/devices/:deviceId/activate', publicWriteLimit, async (req, res) => {
+  const { rows } = await pool.query('SELECT id, team_id FROM devices WHERE id = $1', [req.params.deviceId]);
+  if (!rows[0]) return res.status(404).json({ error: 'unknown device' });
   await pool.query('UPDATE teams SET active_device_id = $1 WHERE id = $2', [rows[0].id, rows[0].team_id]);
   res.json({ ok: true });
 });
@@ -209,7 +226,9 @@ router.get('/:slug/team/:teamId', async (req, res) => {
       bestLapS: m.best_s != null ? Math.round(m.best_s) : null,
     })),
     devices: devices.rows.map((d) => ({
-      token: d.token, // capability: whoever can see the team page can manage its devices
+      // NB: never expose d.token here — the team page is public, and the token
+      // is the ingest capability (leaking it lets anyone inject GPS for the team)
+      id: d.id,
       label: d.member_name || d.name || 'Team device',
       active: d.id === team.active_device_id,
       connected: !!d.activated_at,
