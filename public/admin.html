@@ -175,6 +175,10 @@
             <button id="pauseBtn">⏸ Pause</button>
             <button onclick="control('end_now')">■ End now</button>
           </div>
+          <div class="row">
+            <span id="pubStatus" class="muted" style="flex:1">—</span>
+            <button id="pubBtn" class="primary">🚀 Publish</button>
+          </div>
           <div class="grid2" style="margin-top:8px">
             <label class="muted">starts <input type="datetime-local" id="evStart"></label>
             <label class="muted">ends <input type="datetime-local" id="evEnd"></label>
@@ -203,8 +207,6 @@
               </select></label>
             <label class="muted">commit weight <input type="number" id="cfgWeight" value="0.1" step="0.05"></label>
             <label class="muted" title="commits beyond this don't score (anti commit-spam); blank = no cap">commit cap <input type="number" id="cfgCap" placeholder="none"></label>
-            <label class="muted" title="hide this event from the public landing page (direct links still work)">unlisted
-              <select id="cfgUnlisted"><option value="">public</option><option value="1">hidden from landing</option></select></label>
             <label class="muted" title="all three timings are recorded on every lap — this picks which one scores. exit→entry: window over the timed segment. gate / entry→entry: window over full lap metres.">official timing
               <select id="cfgOfficial">
                 <option value="exit_entry">start-box exit → entry</option>
@@ -407,6 +409,7 @@ async function showEvents() {
       <div style="flex:1"><div class="name">${e.name}</div>
         <div class="meta">/${e.slug} · ${when}</div></div>
       ${quickStart}
+      ${e.published ? '' : '<span class="statuschip" style="color:rgba(244,243,239,0.55);border-color:rgba(244,243,239,0.35)" title="hidden from the public landing">draft</span>'}
       <span class="statuschip" style="color:${statusColour[s]};border-color:${statusColour[s]}">${s}</span>
     </div>`;
   };
@@ -497,13 +500,19 @@ function renderSetup() {
   cfgFormula.value = c.scoreFormula ?? 'km_x_commits'; cfgWeight.value = c.commitWeight ?? 0.1;
   cfgOfficial.value = c.officialTiming ?? 'exit_entry';
   cfgCap.value = c.commitCap ?? '';
-  cfgUnlisted.value = c.unlisted ? '1' : '';
   evStart.value = toLocalInput(cur.start_at); evEnd.value = toLocalInput(cur.end_at);
   document.getElementById('raceStatus').innerHTML =
     `status: <b style="color:${statusColour[statusOf(cur)]}">${statusOf(cur)}</b>`;
   const pb = document.getElementById('pauseBtn');
   pb.textContent = cur.paused_at ? '▶ Resume' : '⏸ Pause';
   pb.onclick = () => control(cur.paused_at ? 'resume' : 'pause');
+  document.getElementById('pubStatus').innerHTML = cur.published
+    ? 'visibility: <b style="color:var(--ok)">live on the public landing</b>'
+    : 'visibility: <b style="color:var(--gold)">draft</b> — direct links work, hidden from the landing';
+  const pubBtn = document.getElementById('pubBtn');
+  pubBtn.textContent = cur.published ? 'Unpublish (back to draft)' : '🚀 Publish to landing';
+  pubBtn.className = cur.published ? '' : 'primary';
+  pubBtn.onclick = () => control(cur.published ? 'unpublish' : 'publish');
   const linkRow = (label, url) => `
     <span class="muted">${label}</span>
     <div class="row"><div class="url" style="flex:1;margin:2px 0">${url}</div>
@@ -529,7 +538,6 @@ async function saveEvent() {
       entryFixes: +cfgEntry.value, exitFixes: +cfgExit.value,
       scoreFormula: cfgFormula.value, commitWeight: +cfgWeight.value,
       commitCap: cfgCap.value ? +cfgCap.value : null,
-      unlisted: !!cfgUnlisted.value,
       officialTiming: cfgOfficial.value,
     },
   };

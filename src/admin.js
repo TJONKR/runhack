@@ -68,8 +68,11 @@ router.post('/events/:slug/control', async (req, res) => {
     end_now: 'UPDATE events SET end_at = now(), paused_at = NULL WHERE slug = $1 RETURNING *',
     pause: 'UPDATE events SET paused_at = now() WHERE slug = $1 RETURNING *',
     resume: 'UPDATE events SET paused_at = NULL WHERE slug = $1 RETURNING *',
+    // draft <-> live: only published events appear on the public landing
+    publish: 'UPDATE events SET published = true WHERE slug = $1 RETURNING *',
+    unpublish: 'UPDATE events SET published = false WHERE slug = $1 RETURNING *',
   }[action];
-  if (!sql) return res.status(400).json({ error: 'action: start_now | end_now | pause | resume' });
+  if (!sql) return res.status(400).json({ error: 'action: start_now | end_now | pause | resume | publish | unpublish' });
   const { rows } = await pool.query(sql, [req.params.slug]);
   if (!rows[0]) return res.status(404).json({ error: 'no such event' });
   res.json(rows[0]);

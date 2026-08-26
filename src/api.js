@@ -20,15 +20,14 @@ function publicWriteLimit(req, res, next) {
   next();
 }
 
-// Public list of events for the landing page. Events with config.unlisted
-// stay off it (dev/test events) but their direct URLs still work.
+// Public list of events for the landing page: PUBLISHED events only.
+// Drafts stay reachable at their direct URLs (for private testing) but are
+// never listed publicly; admins see everything in /admin.
 router.get('/events', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM events ORDER BY start_at DESC NULLS LAST, created_at DESC');
   res.json(
     rows
-      // drafts (no schedule yet) stay off the landing until they're started
-      // or given times; unlisted hides dev/test events permanently
-      .filter((e) => !(e.config || {}).unlisted && (e.start_at || e.end_at))
+      .filter((e) => e.published)
       .map((e) => ({
         slug: e.slug,
         name: e.name,

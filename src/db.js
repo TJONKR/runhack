@@ -83,6 +83,7 @@ export async function initDb() {
     ALTER TABLE events ADD COLUMN IF NOT EXISTS start_at timestamptz;
     ALTER TABLE events ADD COLUMN IF NOT EXISTS end_at timestamptz;
     ALTER TABLE events ADD COLUMN IF NOT EXISTS paused_at timestamptz;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS published boolean NOT NULL DEFAULT false;
     ALTER TABLE teams ADD COLUMN IF NOT EXISTS repo_url text;
     ALTER TABLE teams ADD COLUMN IF NOT EXISTS commit_count integer NOT NULL DEFAULT 0;
     ALTER TABLE teams ADD COLUMN IF NOT EXISTS commits_checked_at timestamptz;
