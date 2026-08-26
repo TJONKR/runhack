@@ -188,7 +188,9 @@
         <h2>Event</h2>
         <div class="card">
           <div class="grid2">
-            <label class="muted">slug <input type="text" id="evSlug" disabled></label>
+            <label class="muted">slug
+              <span class="row" style="padding:0"><input type="text" id="evSlug" disabled style="flex:1">
+              <button onclick="renameSlug()" title="changes every URL containing the slug — reprint QRs after">edit</button></span></label>
             <label class="muted">name <input type="text" id="evName"></label>
           </div>
           <div class="grid3" style="margin-top:6px">
@@ -522,6 +524,18 @@ function renderSetup() {
     linkRow('Join (generic — team QRs are on each team page):', `${location.origin}/${cur.slug}/join`) +
     linkRow('Venue board:', `${location.origin}/${cur.slug}/board`) +
     linkRow('Public API:', `${location.origin}/api/${cur.slug}/board`);
+}
+async function renameSlug() {
+  const v = prompt(
+    'New slug (lowercase, digits, dashes).\n\nWARNING: this changes every URL containing it — team QR codes, join links, and the board URL. Reprint/reshare after.',
+    cur.slug);
+  if (v === null || !v.trim() || v.trim() === cur.slug) return;
+  const r = await fetch(`/api/admin/events/${cur.slug}/rename-slug`, {
+    method: 'POST', headers: H(), body: JSON.stringify({ newSlug: v.trim() }),
+  });
+  if (!r.ok) return alert('failed: ' + (await r.text()));
+  await loadEvents?.();
+  go(v.trim(), 'setup');
 }
 async function saveEvent() {
   const body = {

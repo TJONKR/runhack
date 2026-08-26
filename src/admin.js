@@ -78,6 +78,20 @@ router.post('/events/:slug/control', async (req, res) => {
   res.json(rows[0]);
 });
 
+// Rename an event's slug. All data hangs off the event id so nothing else
+// moves — but every URL containing the slug changes (QRs, board links).
+router.post('/events/:slug/rename-slug', async (req, res) => {
+  const newSlug = String(req.body.newSlug || '').trim();
+  if (!/^[a-z0-9-]+$/.test(newSlug)) return res.status(400).json({ error: 'slug: lowercase, digits, dashes' });
+  const clash = await pool.query('SELECT 1 FROM events WHERE slug = $1', [newSlug]);
+  if (clash.rows[0]) return res.status(409).json({ error: 'that slug is already taken' });
+  const { rows } = await pool.query('UPDATE events SET slug = $1 WHERE slug = $2 RETURNING *', [
+    newSlug, req.params.slug,
+  ]);
+  if (!rows[0]) return res.status(404).json({ error: 'no such event' });
+  res.json(rows[0]);
+});
+
 // Recent laps for a team — for the valid/invalid review panel.
 router.get('/events/:slug/teams/:teamId/laps', async (req, res) => {
   const { rows } = await pool.query(
