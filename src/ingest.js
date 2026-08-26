@@ -3,36 +3,65 @@ import { createState, processFix } from './lapEngine.js';
 
 // Traccar Client speaks the OsmAnd protocol: parameters arrive in the query
 // string, a urlencoded body, or JSON, depending on client version/platform.
+// Overland and OwnTracks post their own JSON to the same URL, and Overland
+// batches several fixes per request — so this returns a list, oldest first.
 // The userId in the path is authoritative; the payload's id is ignored.
-function parseFix(req) {
+export function parseFixes(req) {
   const p = { ...req.query, ...(typeof req.body === 'object' ? req.body : {}) };
+
+  // Overland: GeoJSON features, coordinates are [lng, lat], speed in m/s
+  if (Array.isArray(p.locations)) {
+    return p.locations
+      .map((f) => {
+        const c = f?.geometry?.coordinates || [];
+        const q = f?.properties || {};
+        const lat = num(c[1]);
+        const lng = num(c[0]);
+        if (lat == null || lng == null) return null;
+        return {
+          lat,
+          lng,
+          timestampMs: parseTimestamp(q.timestamp),
+          accuracyM: num(q.horizontal_accuracy ?? q.accuracy),
+          speedMs: num(q.speed),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.timestampMs - b.timestampMs);
+  }
+
   // Newer Traccar JSON nests under location.coords
   const coords = p.location?.coords || {};
 
   const lat = num(p.lat ?? p.latitude ?? coords.latitude);
   const lng = num(p.lon ?? p.lng ?? p.longitude ?? coords.longitude);
-  if (lat == null || lng == null) return null;
+  if (lat == null || lng == null) return [];
 
-  let ts = p.timestamp ?? p.location?.timestamp;
-  let timestampMs;
-  if (ts == null) timestampMs = Date.now();
-  else if (!isNaN(Number(ts))) {
-    ts = Number(ts);
-    timestampMs = ts > 1e12 ? ts : ts * 1000; // seconds vs ms epoch
-  } else {
-    const d = new Date(ts);
-    timestampMs = isNaN(d.getTime()) ? Date.now() : d.getTime();
-  }
-
-  // OsmAnd speed is in knots
+  // OsmAnd speed is in knots; OwnTracks reports vel in km/h
   const speedKn = num(p.speed ?? coords.speed);
-  return {
-    lat,
-    lng,
-    timestampMs,
-    accuracyM: num(p.accuracy ?? p.acc ?? coords.accuracy ?? p.hdop),
-    speedMs: speedKn == null ? null : speedKn * 0.514444,
-  };
+  const velKmh = num(p.vel);
+  const speedMs = speedKn != null ? speedKn * 0.514444 : velKmh != null ? velKmh / 3.6 : null;
+
+  return [
+    {
+      lat,
+      lng,
+      timestampMs: parseTimestamp(p.timestamp ?? p.tst ?? p.location?.timestamp),
+      accuracyM: num(p.accuracy ?? p.acc ?? coords.accuracy ?? p.hdop),
+      speedMs,
+    },
+  ];
+}
+
+// Epoch seconds, epoch millis or an ISO string; anything unusable means "now".
+function parseTimestamp(ts) {
+  if (ts == null) return Date.now();
+  if (!isNaN(Number(ts))) {
+    const n = Number(ts);
+    return n > 1e12 ? n : n * 1000;
+  }
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? Date.now() : d.getTime();
 }
 
 function num(v) {
@@ -54,55 +83,7 @@ function rateLimited(userId) {
   return b.count > 20;
 }
 
-export async function ingestHandler(req, res) {
-  const { userId } = req.params;
-  if (rateLimited(userId)) return res.status(429).send('slow down');
-
-  const fix = parseFix(req);
-  if (!fix) return res.status(400).send('no coordinates');
-
-  const { rows } = await pool.query(
-    `SELECT d.*, t.active_device_id, e.zones, e.config AS event_config, e.start_at, e.end_at, e.paused_at
-       FROM devices d
-       JOIN teams t ON t.id = d.team_id
-       JOIN events e ON e.id = d.event_id
-      WHERE d.token = $1`,
-    [userId]
-  );
-  const device = rows[0];
-  if (!device) return res.status(404).send('unknown id');
-
-  if (!device.activated_at) {
-    await pool.query('UPDATE devices SET activated_at = now() WHERE id = $1', [device.id]);
-  }
-
-  // One scoring device per team. The first device to ping becomes active;
-  // a non-active device takes over only if the active one has gone silent
-  // (dead battery / closed app) — otherwise its pings are recorded for ops
-  // visibility but don't drive the lap engine.
-  const fixJson = { lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM, speedMs: fix.speedMs, at: fix.timestampMs };
-  if (device.active_device_id !== device.id) {
-    let takeOver = device.active_device_id == null;
-    if (!takeOver) {
-      const { rows: act } = await pool.query('SELECT last_fix FROM devices WHERE id = $1', [
-        device.active_device_id,
-      ]);
-      const lastAt = act[0]?.last_fix?.at;
-      takeOver = lastAt == null || Date.now() - lastAt > 90_000;
-    }
-    if (takeOver) {
-      await pool.query(
-        'UPDATE teams SET active_device_id = $1 WHERE id = $2 AND (active_device_id IS NULL OR active_device_id = $3 OR $4)',
-        [device.id, device.team_id, device.active_device_id, device.active_device_id == null]
-      );
-    } else {
-      await pool.query('UPDATE devices SET last_fix = $1 WHERE id = $2', [fixJson, device.id]);
-      return res.status(200).send('standby');
-    }
-  }
-
-  const config = eventConfig({ zones: device.zones, config: device.event_config });
-  const state = device.state && device.state.nextZone !== undefined ? device.state : createState();
+async function applyFix(device, config, state, fix) {
   const { state: newState, events } = processFix(state, fix, config);
 
   // Official timing selection: 'entry_entry' swaps the scored seconds to the
@@ -196,15 +177,80 @@ export async function ingestHandler(req, res) {
     }
   }
 
+  return newState;
+}
+
+export async function ingestHandler(req, res) {
+  const { userId } = req.params;
+  if (rateLimited(userId)) return res.status(429).send('slow down');
+
+  const fixes = parseFixes(req);
+  if (!fixes.length) return res.status(400).send('no coordinates');
+
+  const { rows } = await pool.query(
+    `SELECT d.*, t.active_device_id, e.zones, e.config AS event_config, e.start_at, e.end_at, e.paused_at
+       FROM devices d
+       JOIN teams t ON t.id = d.team_id
+       JOIN events e ON e.id = d.event_id
+      WHERE d.token = $1`,
+    [userId]
+  );
+  const device = rows[0];
+  if (!device) return res.status(404).send('unknown id');
+
+  if (!device.activated_at) {
+    await pool.query('UPDATE devices SET activated_at = now() WHERE id = $1', [device.id]);
+  }
+
+  // One scoring device per team. The first device to ping becomes active;
+  // a non-active device takes over only if the active one has gone silent
+  // (dead battery / closed app) — otherwise its pings are recorded for ops
+  // visibility but don't drive the lap engine.
+  const lastFix = fixes[fixes.length - 1];
+  const fixJson = {
+    lat: lastFix.lat,
+    lng: lastFix.lng,
+    accuracyM: lastFix.accuracyM,
+    speedMs: lastFix.speedMs,
+    at: lastFix.timestampMs,
+  };
+  if (device.active_device_id !== device.id) {
+    let takeOver = device.active_device_id == null;
+    if (!takeOver) {
+      const { rows: act } = await pool.query('SELECT last_fix FROM devices WHERE id = $1', [
+        device.active_device_id,
+      ]);
+      const lastAt = act[0]?.last_fix?.at;
+      takeOver = lastAt == null || Date.now() - lastAt > 90_000;
+    }
+    if (takeOver) {
+      await pool.query(
+        'UPDATE teams SET active_device_id = $1 WHERE id = $2 AND (active_device_id IS NULL OR active_device_id = $3 OR $4)',
+        [device.id, device.team_id, device.active_device_id, device.active_device_id == null]
+      );
+    } else {
+      await pool.query('UPDATE devices SET last_fix = $1 WHERE id = $2', [fixJson, device.id]);
+      return res.status(200).send('standby');
+    }
+  }
+
+  const config = eventConfig({ zones: device.zones, config: device.event_config });
+  let state = device.state && device.state.nextZone !== undefined ? device.state : createState();
+  for (const fix of fixes) {
+    state = await applyFix(device, config, state, fix);
+  }
+
   await pool.query(
     `UPDATE devices SET state = $1, lap_count = $2, last_lap_s = $3, last_fix = $4 WHERE id = $5`,
-    [newState, newState.lapCount, newState.lastLapS, fixJson, device.id]
+    [state, state.lapCount, state.lastLapS, fixJson, device.id]
   );
-  await pool.query(
-    `INSERT INTO points (member_id, device_id, lat, lng, accuracy_m, speed_ms, fixed_at)
-     VALUES ($1, $2, $3, $4, $5, $6, to_timestamp($7 / 1000.0))`,
-    [device.member_id, device.id, fix.lat, fix.lng, fix.accuracyM, fix.speedMs, fix.timestampMs]
-  );
+  for (const fix of fixes) {
+    await pool.query(
+      `INSERT INTO points (member_id, device_id, lat, lng, accuracy_m, speed_ms, fixed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, to_timestamp($7 / 1000.0))`,
+      [device.member_id, device.id, fix.lat, fix.lng, fix.accuracyM, fix.speedMs, fix.timestampMs]
+    );
+  }
 
   res.status(200).send('ok');
 }

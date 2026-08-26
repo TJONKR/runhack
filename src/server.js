@@ -51,6 +51,7 @@ app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
 app.get('/admin', (req, res) => res.sendFile(path.join(publicDir, 'admin.html')));
 app.get('/:slug/join', (req, res) => res.sendFile(path.join(publicDir, 'join.html')));
+app.get('/:slug/track', (req, res) => res.sendFile(path.join(publicDir, 'track.html')));
 app.get('/:slug/board', (req, res) => res.sendFile(path.join(publicDir, 'board.html')));
 app.get('/:slug/team/:teamId', (req, res) => res.sendFile(path.join(publicDir, 'team.html')));
 app.use(express.static(publicDir));
