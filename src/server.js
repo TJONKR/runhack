@@ -7,6 +7,7 @@ import adminRouter from './admin.js';
 import apiRouter from './api.js';
 import { ingestHandler } from './ingest.js';
 import { startGithubPoller } from './github.js';
+import { pushIngestLog } from './ingestLog.js';
 import QRCode from 'qrcode';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,8 +20,50 @@ app.use(express.urlencoded({ extended: false }));
 
 app.get('/healthz', (req, res) => res.send('ok'));
 
+// Pure test endpoint for verifying the Traccar app: accepts anything, logs
+// it to the ingest log, touches no race data. Point Traccar at
+// https://<host>/ingest-test with any device identifier.
+app.all(['/ingest-test', '/ingest-test/:x'], (req, res) => {
+  pushIngestLog({
+    at: new Date().toISOString(),
+    test: true,
+    method: req.method,
+    token: req.params.x || req.query.id || req.body?.id || null,
+    ip: req.ip,
+    ua: (req.headers['user-agent'] || '').slice(0, 90) || null,
+    query: Object.keys(req.query).length ? req.query : undefined,
+    body: req.body && Object.keys(req.body).length ? req.body : undefined,
+    status: 200,
+    result: 'ok (test)',
+  });
+  res.status(200).send('ok (test)');
+});
+
 // Traccar posts here; also accepts GET with query params (old OsmAnd style).
-app.all('/ingest/:userId', (req, res, next) => ingestHandler(req, res).catch(next));
+// Every attempt — including missing/unknown tokens and bad payloads — is
+// recorded to the in-memory ingest log for the admin debug console.
+app.all('/ingest/:userId?', (req, res, next) => {
+  const started = Date.now();
+  const entry = {
+    at: new Date().toISOString(),
+    method: req.method,
+    token: req.params.userId || null,
+    ip: req.ip,
+    ua: (req.headers['user-agent'] || '').slice(0, 90) || null,
+    query: Object.keys(req.query).length ? req.query : undefined,
+    body: req.body && Object.keys(req.body).length ? req.body : undefined,
+  };
+  const send = res.send.bind(res);
+  res.send = (data) => {
+    entry.status = res.statusCode;
+    entry.result = String(data).slice(0, 80);
+    entry.ms = Date.now() - started;
+    pushIngestLog(entry);
+    return send(data);
+  };
+  if (!req.params.userId) return res.status(404).send('no device token in the URL — check Traccar server URL');
+  ingestHandler(req, res).catch(next);
+});
 
 app.use('/api/admin', adminRouter);
 

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from './db.js';
 import { countCommits, pollOnce } from './github.js';
+import { readIngestLog } from './ingestLog.js';
 
 const router = Router();
 
@@ -10,6 +11,44 @@ router.use((req, res, next) => {
     return res.status(401).json({ error: 'bad admin key' });
   }
   next();
+});
+
+// Live ingest debug log (in-memory, newest first) — for testing Traccar.
+router.get('/ingest-log', (req, res) => {
+  res.json(readIngestLog());
+});
+
+// Event-scoped view of the ingest log: this event's device pings, plus every
+// unmatched attempt (unknown token, missing token, /ingest-test) — those are
+// the failures you're debugging, so they show everywhere.
+router.get('/events/:slug/ingest-log', async (req, res) => {
+  const entries = readIngestLog();
+  const tokens = [...new Set(entries.map((e) => e.token).filter(Boolean))];
+  let byToken = new Map();
+  if (tokens.length) {
+    const { rows } = await pool.query(
+      `SELECT d.token, t.name AS team, COALESCE(m.name, d.name, 'Team device') AS label, e.slug
+         FROM devices d
+         JOIN teams t ON t.id = d.team_id
+         JOIN events e ON e.id = d.event_id
+         LEFT JOIN members m ON m.id = d.member_id
+        WHERE d.token = ANY($1)`,
+      [tokens]
+    );
+    byToken = new Map(rows.map((r) => [r.token, r]));
+  }
+  res.json(
+    entries
+      .map((e) => {
+        const d = e.token ? byToken.get(e.token) : null;
+        if (e.test) return { ...e, match: 'test' };
+        if (!e.token) return { ...e, match: 'no_token' };
+        if (!d) return { ...e, match: 'unknown_token' };
+        if (d.slug !== req.params.slug) return null; // another event's traffic
+        return { ...e, match: 'device', team: d.team, label: d.label };
+      })
+      .filter(Boolean)
+  );
 });
 
 router.get('/events', async (req, res) => {

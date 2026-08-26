@@ -140,6 +140,7 @@
     <button data-tab="runners" onclick="go(cur.slug, 'runners')">Runners</button>
     <button data-tab="board" onclick="go(cur.slug, 'board')">Leaderboard</button>
     <button data-tab="map" onclick="go(cur.slug, 'map')">Map</button>
+    <button data-tab="logs" onclick="go(cur.slug, 'logs')">Logs</button>
   </div>
 </div>
 
@@ -289,6 +290,27 @@
     </div>
 
     <div class="etab" id="tab-board"><iframe id="boardFrame"></iframe></div>
+
+    <div class="etab" id="tab-logs">
+      <div class="wrap">
+        <h2>Ingest log <span style="color:rgba(244,243,239,0.4)">(live · last 500 requests · resets on deploy)</span></h2>
+        <div class="card">
+          <span class="muted">Test ping URL — point Traccar here (any device identifier) to verify the app
+            sends pings. Logged below, never touches race data:</span>
+          <div class="row"><div class="url" style="flex:1;margin:2px 0" id="testUrl"></div>
+            <button onclick="copyText(document.getElementById('testUrl').textContent, this)">copy</button></div>
+          <span class="muted">Real device pings for this event appear here too, plus any request with a
+            missing or unknown token (red) — those are Traccar misconfigurations.</span>
+        </div>
+        <div class="row">
+          <input type="text" id="logFilter" placeholder="filter (token, team, text…)" style="flex:1"
+                 oninput="renderLogRows()">
+          <label class="muted" style="display:flex;align-items:center;gap:4px">
+            <input type="checkbox" id="logAuto" checked style="width:auto"> auto-refresh</label>
+        </div>
+        <div id="logList" class="muted" style="font-family:'Geist Mono',monospace;font-size:11px">—</div>
+      </div>
+    </div>
 
     <div class="etab" id="tab-map">
       <div id="mapside">
@@ -464,6 +486,7 @@ async function openEvent(slug, tab) {
     if (!f.src.endsWith(`/${cur.slug}/board`)) f.src = `/${cur.slug}/board`;
   }
   if (tab === 'map') openMap();
+  if (tab === 'logs') { document.getElementById('testUrl').textContent = location.origin + '/ingest-test'; loadLogs(); }
 }
 function setChrome() {
   const inEvent = !!cur;
@@ -849,6 +872,48 @@ function deleteDevice(id, label) {
 setInterval(() => {
   if (cur && curTab === 'runners' && !document.hidden) loadRoster();
 }, 5000);
+
+/* ---------- ingest log tab ---------- */
+let logEntries = [];
+async function loadLogs() {
+  if (!cur) return;
+  try {
+    const r = await fetch(`/api/admin/events/${cur.slug}/ingest-log`, { headers: H() });
+    if (!r.ok) return;
+    logEntries = await r.json();
+    renderLogRows();
+  } catch {}
+}
+function renderLogRows() {
+  const q = (document.getElementById('logFilter').value || '').toLowerCase();
+  const esc = (x) => String(x ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const rows = logEntries
+    .filter((e) => !q || JSON.stringify(e).toLowerCase().includes(q))
+    .slice(0, 200)
+    .map((e) => {
+      const t = new Date(e.at).toLocaleTimeString();
+      const who = e.match === 'device' ? `<b>${esc(e.label)}</b> · ${esc(e.team)}`
+        : e.match === 'test' ? '<span style="color:var(--sky)">TEST</span>'
+        : e.match === 'no_token' ? '<span style="color:var(--orange)">NO TOKEN IN URL</span>'
+        : '<span style="color:var(--orange)">UNKNOWN TOKEN</span>';
+      const okColor = e.status >= 400 ? 'var(--orange)' : 'var(--ok)';
+      const p = e.query || e.body || {};
+      const pos = (p.lat ?? p.latitude) != null ? `${p.lat ?? p.latitude},${p.lon ?? p.lng ?? p.longitude} ±${p.accuracy ?? p.acc ?? p.hdop ?? '?'}m` : '(no coords)';
+      const tok = e.token ? `<span class="muted">${esc(String(e.token).slice(0, 10))}…</span>` : '';
+      return `<div class="row" style="border-top:1px solid var(--line);padding:5px 0;font-size:11px;gap:10px">
+        <span class="muted">${t}</span>
+        <span style="color:${okColor}">${e.status ?? '?'} ${esc(e.result || '')}</span>
+        <span style="flex:1">${who} ${tok}</span>
+        <span>${esc(pos)}</span>
+        <span class="muted" title="${esc(e.ua)}">${esc((e.ua || '').slice(0, 24))}</span>
+      </div>`;
+    });
+  document.getElementById('logList').innerHTML = rows.join('') ||
+    '<div style="padding:20px 0">No pings yet — send one to the test URL above or connect a device.</div>';
+}
+setInterval(() => {
+  if (cur && curTab === 'logs' && !document.hidden && document.getElementById('logAuto')?.checked) loadLogs();
+}, 2000);
 
 /* ---------- map tab (lazy) ---------- */
 let map = null, zones = [], zoneLayers = [], drawing = null;
