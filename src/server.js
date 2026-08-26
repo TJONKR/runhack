@@ -17,6 +17,9 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+// Catch-all text parser: whatever content-type a tracker sends, keep the raw
+// body so the ingest log can show it and the fix parser can attempt it.
+app.use(express.text({ type: () => true, limit: '64kb' }));
 
 app.get('/healthz', (req, res) => res.send('ok'));
 
@@ -31,8 +34,11 @@ app.all(['/ingest-test', '/ingest-test/:x'], (req, res) => {
     token: req.params.x || req.query.id || req.body?.id || null,
     ip: req.ip,
     ua: (req.headers['user-agent'] || '').slice(0, 90) || null,
+    ct: req.headers['content-type'] || undefined,
     query: Object.keys(req.query).length ? req.query : undefined,
-    body: req.body && Object.keys(req.body).length ? req.body : undefined,
+    body: typeof req.body === 'string'
+      ? (req.body.trim() ? req.body.slice(0, 2000) : undefined)
+      : req.body && Object.keys(req.body).length ? req.body : undefined,
     status: 200,
     result: 'ok (test)',
   });
@@ -50,13 +56,17 @@ app.all('/ingest/:userId?', (req, res, next) => {
     token: req.params.userId || null,
     ip: req.ip,
     ua: (req.headers['user-agent'] || '').slice(0, 90) || null,
+    ct: req.headers['content-type'] || undefined,
     query: Object.keys(req.query).length ? req.query : undefined,
-    body: req.body && Object.keys(req.body).length ? req.body : undefined,
+    body: typeof req.body === 'string'
+      ? (req.body.trim() ? req.body.slice(0, 2000) : undefined)
+      : req.body && Object.keys(req.body).length ? req.body : undefined,
   };
   const send = res.send.bind(res);
   res.send = (data) => {
     entry.status = res.statusCode;
     entry.result = String(data).slice(0, 80);
+    entry.note = res.locals.notes?.join(' · ') || undefined;
     entry.ms = Date.now() - started;
     pushIngestLog(entry);
     return send(data);

@@ -5,7 +5,14 @@ import { createState, processFix } from './lapEngine.js';
 // string, a urlencoded body, or JSON, depending on client version/platform.
 // The userId in the path is authoritative; the payload's id is ignored.
 function parseFix(req) {
-  const p = { ...req.query, ...(typeof req.body === 'object' ? req.body : {}) };
+  // Body may arrive parsed (json/urlencoded) or as raw text under an
+  // unexpected content-type — attempt JSON then querystring on strings.
+  let bodyObj = typeof req.body === 'object' && req.body ? req.body : {};
+  if (typeof req.body === 'string' && req.body.trim()) {
+    try { bodyObj = JSON.parse(req.body); }
+    catch { bodyObj = Object.fromEntries(new URLSearchParams(req.body)); }
+  }
+  const p = { ...req.query, ...bodyObj };
   // Newer Traccar JSON nests under location.coords
   const coords = p.location?.coords || {};
 
@@ -58,6 +65,7 @@ export async function ingestHandler(req, res) {
   const { userId } = req.params;
   if (rateLimited(userId)) return res.status(429).send('slow down');
 
+  const note = (m) => (res.locals.notes = res.locals.notes || []).push(m);
   const fix = parseFix(req);
   if (!fix) return res.status(400).send('no coordinates');
 
@@ -74,6 +82,7 @@ export async function ingestHandler(req, res) {
 
   if (!device.activated_at) {
     await pool.query('UPDATE devices SET activated_at = now() WHERE id = $1', [device.id]);
+    note('first ping — device connected');
   }
 
   // One scoring device per team. The first device to ping becomes active;
@@ -91,6 +100,7 @@ export async function ingestHandler(req, res) {
       takeOver = lastAt == null || Date.now() - lastAt > 90_000;
     }
     if (takeOver) {
+      note('took over as active tracker');
       await pool.query(
         'UPDATE teams SET active_device_id = $1 WHERE id = $2 AND (active_device_id IS NULL OR active_device_id = $3 OR $4)',
         [device.id, device.team_id, device.active_device_id, device.active_device_id == null]
@@ -104,6 +114,11 @@ export async function ingestHandler(req, res) {
   const config = eventConfig({ zones: device.zones, config: device.event_config });
   const state = device.state && device.state.nextZone !== undefined ? device.state : createState();
   const { state: newState, events } = processFix(state, fix, config);
+  for (const ev of events) {
+    if (ev.type === 'dropped') note(`fix dropped: ${ev.reason}`);
+    if (ev.type === 'zone_enter') note(`entered zone ${ev.zone}`);
+    if (ev.type === 'gate_lap') note(`gate lap ${ev.seconds.toFixed(1)}s`);
+  }
 
   // Official timing selection: 'entry_entry' swaps the scored seconds to the
   // full-lap entry-to-entry measurement before validation. ('gate' is applied
@@ -161,6 +176,7 @@ export async function ingestHandler(req, res) {
   // the person the device is linked to, if any.
   for (const ev of events) {
     if (ev.type === 'lap') {
+      note(`LAP ${Math.round(ev.seconds)}s ${ev.counted ? '\u2713 counted' : '\u2715 ' + ev.reason}`);
       await pool.query(
         `INSERT INTO laps (event_id, team_id, member_id, device_id, seconds, counted, reject_reason, entry_seconds)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,

@@ -292,7 +292,7 @@
     <div class="etab" id="tab-board"><iframe id="boardFrame"></iframe></div>
 
     <div class="etab" id="tab-logs">
-      <div class="wrap">
+      <div style="flex:1;min-width:0;overflow-y:auto"><div class="wrap" style="max-width:none">
         <h2>Ingest log <span style="color:rgba(244,243,239,0.4)">(live · last 500 requests · resets on deploy)</span></h2>
         <div class="card">
           <span class="muted">Test ping URL — point Traccar here (any device identifier) to verify the app
@@ -309,6 +309,9 @@
             <input type="checkbox" id="logAuto" checked style="width:auto"> auto-refresh</label>
         </div>
         <div id="logList" class="muted" style="font-family:'Geist Mono',monospace;font-size:11px">—</div>
+      </div></div>
+      <div id="logmaparea" style="width:42%;min-width:320px;position:relative;border-left:1px solid var(--line)">
+        <div id="logmap" style="position:absolute;inset:0"></div>
       </div>
     </div>
 
@@ -477,7 +480,7 @@ async function openEvent(slug, tab) {
   show('view-event');
   document.querySelectorAll('.etab').forEach((el) => el.classList.remove('on', 'flexon'));
   const el = document.getElementById('tab-' + tab);
-  el.classList.add(tab === 'map' ? 'flexon' : 'on');
+  el.classList.add(tab === 'map' || tab === 'logs' ? 'flexon' : 'on');
   if (tab === 'setup') renderSetup();
   if (tab === 'teams') renderTeams();
   if (tab === 'runners') loadRoster();
@@ -486,7 +489,11 @@ async function openEvent(slug, tab) {
     if (!f.src.endsWith(`/${cur.slug}/board`)) f.src = `/${cur.slug}/board`;
   }
   if (tab === 'map') openMap();
-  if (tab === 'logs') { document.getElementById('testUrl').textContent = location.origin + '/ingest-test'; loadLogs(); }
+  if (tab === 'logs') {
+    document.getElementById('testUrl').textContent = location.origin + '/ingest-test';
+    ensureLogMap();
+    loadLogs();
+  }
 }
 function setChrome() {
   const inEvent = !!cur;
@@ -874,6 +881,54 @@ setInterval(() => {
 }, 5000);
 
 /* ---------- ingest log tab ---------- */
+let logMap = null, logPingLayer = null, logZoneLayer = null, logFocusMarker = null;
+function ensureLogMap() {
+  if (!logMap) {
+    logMap = L.map('logmap').setView([51.5385, -0.0166], 15);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, attribution: '&copy; OpenStreetMap' }).addTo(logMap);
+    logPingLayer = L.layerGroup().addTo(logMap);
+    logZoneLayer = L.layerGroup().addTo(logMap);
+  }
+  setTimeout(() => logMap.invalidateSize(), 50);
+  logZoneLayer.clearLayers();
+  (cur.zones || []).forEach((z, i) =>
+    L.polygon(z.polygon, { color: colour(i), weight: 2, fillOpacity: 0.05 }).addTo(logZoneLayer));
+  if (cur.zones?.[0]?.polygon?.[0]) logMap.setView(cur.zones[0].polygon[0], 16);
+}
+function logCoords(e) {
+  let p = { ...(e.query || {}) };
+  if (typeof e.body === 'object' && e.body) p = { ...p, ...e.body };
+  else if (typeof e.body === 'string') {
+    try { p = { ...p, ...JSON.parse(e.body) }; }
+    catch { try { p = { ...p, ...Object.fromEntries(new URLSearchParams(e.body)) }; } catch {} }
+  }
+  const c = p.location?.coords || {};
+  const lat = parseFloat(p.lat ?? p.latitude ?? c.latitude);
+  const lng = parseFloat(p.lon ?? p.lng ?? p.longitude ?? c.longitude);
+  return isNaN(lat) || isNaN(lng) ? null : [lat, lng];
+}
+let renderedLog = [];
+function plotLogPings() {
+  if (!logMap) return;
+  logPingLayer.clearLayers();
+  renderedLog.forEach((e, i) => {
+    const ll = logCoords(e);
+    if (!ll) return;
+    const col = e.match === 'device' ? '#4ade80' : e.match === 'test' ? '#3A90E6' : '#DD6A24';
+    L.circleMarker(ll, { radius: i === 0 ? 7 : 4, color: col, fillColor: col, fillOpacity: 0.7, weight: 1 })
+      .bindTooltip(`${new Date(e.at).toLocaleTimeString()} · ${e.match}${e.note ? ' · ' + e.note : ''}`)
+      .addTo(logPingLayer);
+  });
+}
+function logFocus(i) {
+  const e = renderedLog[i];
+  const ll = e && logCoords(e);
+  if (!ll || !logMap) return;
+  logMap.setView(ll, Math.max(logMap.getZoom(), 17));
+  if (logFocusMarker) logMap.removeLayer(logFocusMarker);
+  logFocusMarker = L.circleMarker(ll, { radius: 11, color: '#F0BE2A', fill: false, weight: 3 }).addTo(logMap);
+}
+
 let logEntries = [];
 async function loadLogs() {
   if (!cur) return;
@@ -887,29 +942,38 @@ async function loadLogs() {
 function renderLogRows() {
   const q = (document.getElementById('logFilter').value || '').toLowerCase();
   const esc = (x) => String(x ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const rows = logEntries
+  renderedLog = logEntries
     .filter((e) => !q || JSON.stringify(e).toLowerCase().includes(q))
-    .slice(0, 200)
-    .map((e) => {
+    .slice(0, 200);
+  const rows = renderedLog
+    .map((e, i) => {
       const t = new Date(e.at).toLocaleTimeString();
       const who = e.match === 'device' ? `<b>${esc(e.label)}</b> · ${esc(e.team)}`
         : e.match === 'test' ? '<span style="color:var(--sky)">TEST</span>'
         : e.match === 'no_token' ? '<span style="color:var(--orange)">NO TOKEN IN URL</span>'
         : '<span style="color:var(--orange)">UNKNOWN TOKEN</span>';
       const okColor = e.status >= 400 ? 'var(--orange)' : 'var(--ok)';
-      const p = e.query || e.body || {};
-      const pos = (p.lat ?? p.latitude) != null ? `${p.lat ?? p.latitude},${p.lon ?? p.lng ?? p.longitude} ±${p.accuracy ?? p.acc ?? p.hdop ?? '?'}m` : '(no coords)';
+      const ll = logCoords(e);
+      const p = e.query || (typeof e.body === 'object' ? e.body : null) || {};
+      const pos = ll ? `${(+ll[0]).toFixed(5)},${(+ll[1]).toFixed(5)} ±${p.accuracy ?? p.acc ?? p.hdop ?? '?'}m` : '(no coords)';
       const tok = e.token ? `<span class="muted">${esc(String(e.token).slice(0, 10))}…</span>` : '';
-      return `<div class="row" style="border-top:1px solid var(--line);padding:5px 0;font-size:11px;gap:10px">
+      const note = e.note ? `<span style="color:var(--gold)">${esc(e.note)}</span>` : '';
+      return `<div class="logentry" style="border-top:1px solid var(--line)">
+        <div class="row" style="padding:5px 0;font-size:11px;gap:10px;cursor:pointer"
+             onclick="logFocus(${i}); this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
         <span class="muted">${t}</span>
         <span style="color:${okColor}">${e.status ?? '?'} ${esc(e.result || '')}</span>
-        <span style="flex:1">${who} ${tok}</span>
+        <span style="flex:1">${who} ${tok} ${note}</span>
         <span>${esc(pos)}</span>
         <span class="muted" title="${esc(e.ua)}">${esc((e.ua || '').slice(0, 24))}</span>
+        </div>
+        <pre style="display:none;margin:0 0 8px;padding:10px;background:rgba(0,0,0,0.3);border-radius:4px;
+             font-size:10px;overflow-x:auto;white-space:pre-wrap">${esc(JSON.stringify(e, null, 2))}</pre>
       </div>`;
     });
   document.getElementById('logList').innerHTML = rows.join('') ||
     '<div style="padding:20px 0">No pings yet — send one to the test URL above or connect a device.</div>';
+  plotLogPings();
 }
 setInterval(() => {
   if (cur && curTab === 'logs' && !document.hidden && document.getElementById('logAuto')?.checked) loadLogs();
