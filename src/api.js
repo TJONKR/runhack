@@ -109,7 +109,8 @@ router.post('/:slug/devices', publicWriteLimit, async (req, res) => {
 // Join-page poll: has the first Traccar fix landed yet?
 router.get('/device/:token/status', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT d.activated_at, d.lap_count, d.last_fix, d.id = t.active_device_id AS is_active
+    `SELECT d.activated_at, d.lap_count, d.last_lap_s, d.last_fix,
+            d.id = t.active_device_id AS is_active
        FROM devices d JOIN teams t ON t.id = d.team_id WHERE d.token = $1`,
     [req.params.token]
   );
@@ -119,6 +120,7 @@ router.get('/device/:token/status', async (req, res) => {
     activated: !!d.activated_at,
     active: !!d.is_active,
     laps: d.lap_count,
+    lastLapS: d.last_lap_s,
     lastFixAgoS: d.last_fix?.at ? Math.round((Date.now() - d.last_fix.at) / 1000) : null,
   });
 });

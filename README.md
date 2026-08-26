@@ -22,6 +22,10 @@ People and devices are separate things:
    Play) with the ingest URL and that token as Traccar's device identifier.
 3. Traccar streams GPS to `POST /ingest/{token}` (OsmAnd protocol — query,
    form, or JSON). Every ping self-identifies: token → team (+ person).
+   The same URL also accepts [OwnTracks](https://owntracks.org) and
+   [Overland](https://overland.p3k.app) payloads (Overland batches several
+   fixes per request), and `/{event}/track?d={token}` tracks straight from
+   the phone browser with no app at all — see **Trackers** below.
 4. **One scoring device per team.** The first device to ping becomes the
    team's tracker; other devices ping in standby. Handoff on a shared phone
    needs no action at all — just pass it. Multi-phone handoff = tap "Make
@@ -31,6 +35,21 @@ People and devices are separate things:
    double-count.
 5. All lap logic runs server-side: geofence zone sequence, dwell rules,
    accuracy gating, pace window, leaderboard, GitHub commit polling.
+
+## Trackers
+
+| | app needed | tracks in background |
+| --- | --- | --- |
+| Traccar Client (Android) | yes | yes |
+| Traccar Client (iOS) | yes | best-effort — iOS wakes it on movement events and it pauses itself when it decides you're stationary |
+| Overland / OwnTracks (iOS) | yes | yes, with "Always" location permission |
+| `/{event}/track` browser page | no | no — screen must stay on and the page in front |
+
+The browser page is the zero-setup option handed out from the join flow: it
+streams `watchPosition` fixes once a second to the same ingest URL, holds a
+screen wake lock, and buffers fixes through signal drops (replaying them as an
+Overland batch), but iOS stops giving location to a backgrounded browser, so it
+only works with the page in the foreground.
 
 ## Lap detection & timing
 
@@ -78,7 +97,8 @@ GitHub's 60 req/hr IP limit breaks at even a handful of teams. The admin
 | `/{event}/board` | venue big-screen board |
 | `/api/{event}/board` | public JSON board — poll every 2–5s |
 | `/api/{event}/team/N` | public team JSON |
-| `/ingest/{userId}` | Traccar ingest |
+| `/{event}/track?d={token}` | in-browser GPS tracker (no app) |
+| `/ingest/{userId}` | Traccar / OwnTracks / Overland ingest |
 
 The board page/API and team pages are public; everything mutating sits
 behind `/api/admin/*`.
@@ -140,5 +160,5 @@ npm test
   the admin laps panel against a stopwatch; pick the winner in Setup and
   calibrate the lap window to it.
 - Verify the Traccar deep link on a real iPhone and a real Android (the join
-  page has a manual-setup fallback).
+  page has a manual-setup fallback, plus the browser tracker).
 - Create the real event fresh (or **Reset race data** after the rehearsal).

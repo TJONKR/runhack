@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>RUN/HACK tracking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root { --paper: #F4F3EF; --navy: #08182F; --navy2: #0C2140; --blue: #1311D1;
+          --orange: #DD6A24; --gold: #F0BE2A; --sky: #3A90E6; --ok: #4ade80;
+          --bad: #f87171; --line: rgba(244,243,239,0.15); }
+  * { box-sizing: border-box; }
+  body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy);
+         color: var(--paper); min-height: 100vh; display: flex; flex-direction: column; }
+  header { background: var(--blue); border-bottom: 3px solid var(--gold); padding: 14px 24px; }
+  .wordmark { font-weight: 900; font-size: 24px; letter-spacing: -1px; line-height: 1; }
+  .wordmark .slash { color: var(--orange); }
+  .powered { display: flex; align-items: center; gap: 6px; margin-top: 4px;
+             font-family: 'Geist Mono', monospace; font-size: 7px; letter-spacing: 0.28em;
+             text-transform: uppercase; color: rgba(244,243,239,0.55); }
+  .powered img { height: 11px; display: block; }
+  main { width: 100%; max-width: 430px; margin: 0 auto; padding: 28px 24px; flex: 1; }
+  h1 { font-weight: 900; font-size: 30px; letter-spacing: -1px; margin: 0 0 6px; }
+  .sub { color: rgba(244,243,239,0.5); font-size: 14px; line-height: 1.5; }
+  label { display: block; margin: 20px 0 5px; font-family: 'Geist Mono', monospace; font-size: 10px;
+          letter-spacing: 0.2em; text-transform: uppercase; color: rgba(244,243,239,0.55); }
+  input { width: 100%; padding: 13px; font-size: 16px; border-radius: 6px;
+          border: 1px solid var(--line); background: var(--navy2); color: var(--paper);
+          font-family: 'Geist Mono', monospace; }
+  input:focus { outline: 2px solid var(--sky); border-color: transparent; }
+  button { width: 100%; padding: 17px; font-size: 17px; font-weight: 700; border: 0;
+           border-radius: 8px; background: var(--gold); color: var(--navy); margin-top: 22px;
+           cursor: pointer; font-family: inherit; }
+  button:hover { background: #ffd34d; }
+  button.stop { background: transparent; border: 1px solid var(--line); color: rgba(244,243,239,0.7);
+                font-weight: 400; font-size: 14px; padding: 12px; }
+  .laps { font-weight: 900; font-size: 76px; line-height: 1; letter-spacing: -3px; }
+  .lapsLabel { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.2em;
+               text-transform: uppercase; color: rgba(244,243,239,0.55); }
+  .live { display: none; }
+  .live.on { display: block; }
+  .rows { margin-top: 22px; border-top: 1px solid var(--line); }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0;
+         border-bottom: 1px solid var(--line); font-size: 14px; }
+  .row span:first-child { color: rgba(244,243,239,0.5); }
+  .row span:last-child { font-family: 'Geist Mono', monospace; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+         background: var(--ok); margin-right: 7px; vertical-align: middle;
+         animation: p 1.6s ease-in-out infinite; }
+  .dot.bad { background: var(--bad); animation: none; }
+  @keyframes p { 50% { opacity: 0.25; } }
+  .warn { margin-top: 18px; padding: 12px 14px; border-radius: 8px; background: var(--navy2);
+          border: 1px solid var(--line); font-size: 13px; line-height: 1.5;
+          color: rgba(244,243,239,0.7); }
+  .warn b { color: var(--paper); }
+  .err { color: var(--bad); font-size: 14px; margin-top: 16px; min-height: 20px; }
+</style>
+</head>
+<body>
+<header>
+  <a href="/" style="color:inherit;text-decoration:none"><div class="wordmark">RUN<span class="slash">/</span>HACK</div></a>
+  <div class="powered">Powered by <img src="/brands/02-roxfit.png" alt="ROXFIT"></div>
+</header>
+<main>
+  <h1 id="eventName">Tracking</h1>
+  <div class="sub" id="intro">This page sends your phone's GPS straight to the leaderboard — no
+    tracking app needed. Keep it open and the screen on while you run.</div>
+
+  <div id="setup">
+    <label>Device code</label>
+    <input id="token" placeholder="paste your device code" autocomplete="off" spellcheck="false">
+    <button onclick="start()">Start tracking →</button>
+    <div class="warn">No code? Open <a href="" id="joinLink" style="color:var(--sky)">the join page</a>
+      first — it registers you and hands this page the code automatically.</div>
+  </div>
+
+  <div class="live" id="live">
+    <div class="laps" id="laps">0</div>
+    <div class="lapsLabel" id="lapsLabel">laps on this phone</div>
+    <div class="rows">
+      <div class="row"><span>Status</span><span id="statusVal"><span class="dot"></span>starting…</span></div>
+      <div class="row"><span>Fixes sent</span><span id="sentVal">0</span></div>
+      <div class="row"><span>GPS accuracy</span><span id="accVal">—</span></div>
+      <div class="row"><span>Last lap</span><span id="lastLapVal">—</span></div>
+      <div class="row"><span>Screen lock</span><span id="wakeVal">—</span></div>
+    </div>
+    <div class="warn" id="hint"><b>Keep this tab open.</b> iOS stops giving location to a
+      backgrounded browser, so leave the screen on and this page in front while you run.</div>
+    <button class="stop" onclick="stop()">Stop tracking</button>
+  </div>
+  <div class="err" id="err"></div>
+</main>
+<footer id="sponsor-bar"></footer>
+<script src="/sponsor-bar.js"></script>
+
+<script>
+const slug = location.pathname.split('/')[1];
+const KEY = `runhack:device:${slug}`;
+
+let token = null;
+let watchId = null;
+let wakeLock = null;
+let sent = 0;
+let lastSentAt = 0;
+let queue = [];            // fixes that failed to upload, retried as a batch
+let failures = 0;
+
+// Cadence: one upload per second is plenty for lap detection and stays under
+// the server's rate limit.
+const MIN_INTERVAL_MS = 1000;
+
+document.getElementById('joinLink').href = `/${slug}/join`;
+
+async function init() {
+  try {
+    const r = await fetch(`/api/${slug}/info`);
+    if (r.ok) document.getElementById('eventName').textContent = (await r.json()).name;
+  } catch {}
+  const fromUrl = new URLSearchParams(location.search).get('d');
+  const saved = fromUrl || localStorage.getItem(KEY);
+  if (saved) {
+    document.getElementById('token').value = saved;
+    if (fromUrl) start();
+  }
+}
+
+async function start() {
+  const t = document.getElementById('token').value.trim();
+  if (!t) return fail('Paste your device code first.');
+  const r = await fetch(`/api/device/${encodeURIComponent(t)}/status`).catch(() => null);
+  if (!r || !r.ok) return fail('That device code is not registered for this event.');
+  if (!navigator.geolocation) return fail('This browser has no GPS access.');
+
+  token = t;
+  localStorage.setItem(KEY, token);
+  fail('');
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('intro').style.display = 'none';
+  document.getElementById('live').classList.add('on');
+
+  watchId = navigator.geolocation.watchPosition(onFix, onGeoError, {
+    enableHighAccuracy: true,
+    maximumAge: 0,
+    timeout: 20000,
+  });
+  keepAwake();
+  poll();
+}
+
+function stop() {
+  if (watchId != null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  releaseWake();
+  document.getElementById('live').classList.remove('on');
+  document.getElementById('setup').style.display = 'block';
+  document.getElementById('intro').style.display = 'block';
+}
+
+function onFix(pos) {
+  const c = pos.coords;
+  document.getElementById('accVal').textContent =
+    c.accuracy == null ? '—' : `${Math.round(c.accuracy)} m`;
+
+  const now = Date.now();
+  if (now - lastSentAt < MIN_INTERVAL_MS) return;
+  lastSentAt = now;
+  upload({
+    lat: c.latitude,
+    lon: c.longitude,
+    timestamp: Math.round(pos.timestamp / 1000),
+    accuracy: c.accuracy == null ? undefined : Math.round(c.accuracy),
+    speed: c.speed == null || c.speed < 0 ? undefined : c.speed / 0.514444, // OsmAnd wants knots
+  });
+}
+
+// Failed fixes are kept and replayed as an Overland-style batch, so a tunnel or
+// signal blip doesn't put a hole in the middle of a lap.
+async function upload(fix) {
+  const batch = [...queue, fix];
+  try {
+    const body = batch.length === 1 ? fix : { locations: batch.map(asOverland) };
+    const r = await fetch(`/ingest/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      keepalive: true,
+    });
+    if (!r.ok) throw new Error(await r.text());
+    queue = [];
+    sent += batch.length;
+    failures = 0;
+    document.getElementById('sentVal').textContent = sent;
+    setStatus(true, 'sending');
+  } catch (e) {
+    queue = batch.slice(-120); // ~2 minutes of buffer, then drop the oldest
+    failures += 1;
+    setStatus(false, `retrying (${queue.length} queued)`);
+  }
+}
+
+function asOverland(f) {
+  return {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [f.lon, f.lat] },
+    properties: {
+      timestamp: f.timestamp,
+      horizontal_accuracy: f.accuracy,
+      speed: f.speed == null ? undefined : f.speed * 0.514444,
+    },
+  };
+}
+
+function setStatus(ok, text) {
+  document.getElementById('statusVal').innerHTML =
+    `<span class="dot${ok ? '' : ' bad'}"></span>${text}`;
+}
+
+function onGeoError(e) {
+  setStatus(false, 'no GPS');
+  fail(e.code === e.PERMISSION_DENIED
+    ? 'Location permission denied — allow it for this site in your browser settings.'
+    : 'Could not get a GPS fix. Step outside and keep this page open.');
+}
+
+// Screen Wake Lock keeps the screen on where supported (Chrome, Safari 16.4+);
+// it is dropped when the tab is hidden, so re-acquire on the way back.
+async function keepAwake() {
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    document.getElementById('wakeVal').textContent = 'on';
+    wakeLock.addEventListener('release', () => {
+      document.getElementById('wakeVal').textContent = 'released';
+    });
+  } catch {
+    document.getElementById('wakeVal').textContent = 'unsupported — set auto-lock to never';
+  }
+}
+function releaseWake() { try { wakeLock?.release(); } catch {} wakeLock = null; }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && watchId != null) keepAwake();
+});
+
+async function poll() {
+  if (watchId == null) return;
+  try {
+    const r = await fetch(`/api/device/${token}/status`);
+    if (r.ok) {
+      const s = await r.json();
+      document.getElementById('laps').textContent = s.laps;
+      document.getElementById('lastLapVal').textContent = s.lastLapS ? `${s.lastLapS}s` : '—';
+      document.getElementById('lapsLabel').textContent = s.active
+        ? 'laps on this phone'
+        : 'laps on this phone · standby, another phone is scoring';
+    }
+  } catch {}
+  setTimeout(poll, 3000);
+}
+
+function fail(msg) { document.getElementById('err').textContent = msg; }
+init();
+</script>
+</body>
+</html>

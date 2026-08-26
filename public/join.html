@@ -84,6 +84,7 @@
   <div class="step" id="step-traccar">
     <div class="status">Now connect the Traccar app</div>
     <button onclick="openTraccar()">Open Traccar with our settings</button>
+    <button class="secondary" onclick="openWebTracker()">No app — track in this browser instead</button>
     <button class="secondary" onclick="showManual()">Nothing happened?</button>
     <div id="manual" style="display:none">
       <p class="muted">1. Install Traccar Client:
@@ -93,7 +94,10 @@
         set these manually in Traccar and start the service:</p>
       <p class="muted">Server URL: <code id="manualUrl"></code><br>
          Device identifier: <code id="manualId"></code><br>
-         Accuracy: highest · Interval: 2s · Distance: 0</p>
+         Accuracy: highest · Interval: 2s · Distance: 0 · Angle: 0</p>
+      <p class="muted">On iPhone, Traccar pauses itself when it thinks you've stopped. For
+        uninterrupted tracking use the browser option above, or point
+        <a href="https://overland.p3k.app">Overland</a> at the same Server URL.</p>
     </div>
     <div class="status" style="font-weight:400;font-size:15px" id="waiting">
       <span class="spin"></span>Waiting for your first GPS ping…</div>
@@ -195,6 +199,9 @@ function openTraccar() {
   location.href = cfg;
 }
 function showManual() { document.getElementById('manual').style.display = 'block'; }
+
+// Browser tracking: no app, but only while the page stays in the foreground.
+function openWebTracker() { location.href = `/${slug}/track?d=${token}`; }
 
 async function poll() {
   let r = null;
