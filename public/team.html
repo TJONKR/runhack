@@ -119,10 +119,15 @@ document.getElementById('copyJoin').onclick = (e) => {
 };
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
+let everLoaded = false;
 async function tick() {
   try {
     const r = await fetch(`/api/${slug}/team/${teamId}`);
-    if (!r.ok) return;
+    if (!r.ok) {
+      if (!everLoaded) document.getElementById('teamname').textContent = 'Team not found';
+      return;
+    }
+    everLoaded = true;
     const t = await r.json();
     document.getElementById('eventname').textContent = t.event;
     document.getElementById('teamname').textContent = t.team;
@@ -176,7 +181,9 @@ async function tick() {
         <span class="name" style="font-weight:400">${esc(d.label)}</span>
         <span class="tag">${d.laps} laps · ${tag}</span>${btn}</div>`;
     }).join('') || '<div class="tag">No devices yet — set one up from the join page</div>';
-  } catch {}
+  } catch {
+    if (!everLoaded) document.getElementById('teamname').textContent = 'No connection — retrying…';
+  }
 }
 async function makeActive(id) {
   await fetch(`/api/devices/${id}/activate`, { method: 'POST' });

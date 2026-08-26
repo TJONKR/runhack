@@ -116,7 +116,13 @@ const teamId = () => +document.getElementById('team').value;
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 async function init() {
-  const r = await fetch(`/api/${slug}/info`);
+  let r;
+  try { r = await fetch(`/api/${slug}/info`); }
+  catch {
+    document.getElementById('eventName').textContent = 'No connection — retrying…';
+    setTimeout(init, 4000);
+    return;
+  }
   if (!r.ok) { document.getElementById('eventName').textContent = 'Unknown event'; document.getElementById('step-register').style.display = 'none'; return; }
   const info = await r.json();
   document.getElementById('eventName').textContent = info.name;
@@ -141,11 +147,12 @@ async function register() {
   const name = document.getElementById('name').value.trim();
   if (!name) return alert('Enter your name');
   const repoUrl = document.getElementById('repo').value.trim() || undefined;
-  const r = await fetch(`/api/${slug}/members`, {
+  let r;
+  try { r = await fetch(`/api/${slug}/members`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ teamId: teamId(), name, repoUrl }),
-  });
+  }); } catch { return alert('No connection — check signal and try again.'); }
   if (!r.ok) return alert('Registration failed: ' + (await r.text()));
   newMemberId = (await r.json()).memberId;
   openDeviceStep();
@@ -153,8 +160,9 @@ async function register() {
 
 // Step 2: register this phone as a tracking device (team-level or per-person).
 async function openDeviceStep() {
-  const r = await fetch(`/api/${slug}/team/${teamId()}`);
-  const t = r.ok ? await r.json() : { members: [] };
+  let r = null;
+  try { r = await fetch(`/api/${slug}/team/${teamId()}`); } catch {}
+  const t = r && r.ok ? await r.json() : { members: [] };
   const sel = document.getElementById('deviceOwner');
   sel.innerHTML = `<option value="">Team phone (shared)</option>` +
     (t.members || []).map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
@@ -165,11 +173,12 @@ async function openDeviceStep() {
 async function connectDevice() {
   const memberId = +document.getElementById('deviceOwner').value || null;
   const label = document.getElementById('deviceOwner').selectedOptions[0]?.textContent;
-  const r = await fetch(`/api/${slug}/devices`, {
+  let r;
+  try { r = await fetch(`/api/${slug}/devices`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ teamId: teamId(), memberId, name: label }),
-  });
+  }); } catch { return alert('No connection — check signal and try again.'); }
   if (!r.ok) return alert('Device setup failed: ' + (await r.text()));
   token = (await r.json()).token;
   show('step-traccar');
@@ -188,8 +197,9 @@ function openTraccar() {
 function showManual() { document.getElementById('manual').style.display = 'block'; }
 
 async function poll() {
-  const r = await fetch(`/api/device/${token}/status`);
-  if (r.ok) {
+  let r = null;
+  try { r = await fetch(`/api/device/${token}/status`); } catch {}
+  if (r && r.ok) {
     const s = await r.json();
     if (s.activated) {
       show('step-live');

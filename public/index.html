@@ -63,8 +63,18 @@
 const COLOURS = { live: 'var(--ok)', paused: 'var(--gold)', upcoming: 'var(--sky)', finished: 'var(--orange)' };
 const LABELS = { live: 'live now', paused: 'paused', upcoming: 'upcoming', finished: 'finished' };
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-(async () => {
-  const events = await (await fetch('/api/events')).json();
+const M = document.getElementById('main');
+M.innerHTML = '<div class="empty"><div class="sub">Loading events…</div></div>';
+async function load() {
+  let events;
+  try {
+    events = await (await fetch('/api/events')).json();
+  } catch {
+    M.innerHTML = `<div class="empty"><div class="big">NO <span class="accent">SIGNAL</span></div>
+      <div class="sub">Can't reach the server — retrying…</div></div>`;
+    setTimeout(load, 4000);
+    return;
+  }
   const groups = { live: [], paused: [], upcoming: [], finished: [] };
   events.forEach((e) => (groups[e.status] || groups.finished).push(e));
   const card = (e) => `<a class="card" href="/${e.slug}/board">
@@ -73,14 +83,15 @@ function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'
     <span class="chip" style="color:${COLOURS[e.status]};border-color:${COLOURS[e.status]}">${LABELS[e.status]}</span>
     <span class="arrow">→</span></a>`;
   const section = (key, title) => groups[key].length ? `<h2>${title}</h2>` + groups[key].map(card).join('') : '';
-  document.getElementById('main').innerHTML =
+  M.innerHTML =
     section('live', 'Live now') + section('paused', 'Paused') +
     section('upcoming', 'Upcoming') + section('finished', 'Past events') ||
     `<div class="empty">
        <div class="big">NOBODY <span class="accent">SITS DOWN</span></div>
        <div class="sub">The next race will appear here · therunninghackathon.com</div>
      </div>`;
-})();
+}
+load();
 </script>
 </body>
 </html>

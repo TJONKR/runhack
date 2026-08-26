@@ -344,7 +344,9 @@ let curTab = 'setup';
 /* ---------- auth ---------- */
 async function login() {
   key = document.getElementById('adminKey').value.trim();
-  const r = await fetch('/api/admin/events', { headers: H() });
+  let r;
+  try { r = await fetch('/api/admin/events', { headers: H() }); }
+  catch { document.getElementById('loginErr').textContent = "Network error — can't reach the server."; return; }
   if (!r.ok) { document.getElementById('loginErr').textContent = 'Wrong password.'; return; }
   localStorage.setItem('adminKey', key);
   document.getElementById('login').style.display = 'none';

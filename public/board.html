@@ -148,6 +148,7 @@ const slug = location.pathname.split('/')[1];
 let board = null;
 let clockSkewMs = 0;
 let lastFetchOkAt = null;
+const pageOpenedAt = Date.now();
 
 function fmtPace(s) {
   if (s == null) return '—';
@@ -210,7 +211,15 @@ async function tick() {
 // names are on screen before the gun.
 function renderState() {
   const el = document.getElementById('state');
-  if (!board) return;
+  if (!board) {
+    // never loaded: after a few seconds show an explicit no-signal state
+    if (Date.now() - pageOpenedAt > 6000) {
+      el.innerHTML = `<div class="big">NO <span class="accent">SIGNAL</span></div>
+        <div class="sub">Can't reach the race clock — retrying…</div>`;
+      el.style.display = 'block';
+    }
+    return;
+  }
   const nothingYet = board.teams.every((t) => t.laps === 0 && !t.runner);
   if (board.status === 'paused') {
     el.innerHTML = `<div class="big">RACE <span class="accent">PAUSED</span></div>
@@ -275,7 +284,7 @@ function renderGun() {
 }
 
 setInterval(tick, 3000);
-setInterval(() => { renderGun(); renderUpdated(); }, 1000);
+setInterval(() => { renderGun(); renderUpdated(); if (!board) renderState(); }, 1000);
 tick();
 </script>
 </body>
