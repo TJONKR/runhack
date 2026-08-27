@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { initDb } from './db.js';
+import { initDb, pool } from './db.js';
 import adminRouter from './admin.js';
 import apiRouter from './api.js';
 import { ingestHandler } from './ingest.js';
@@ -107,6 +107,17 @@ app.get('/:slug/join', (req, res) => res.sendFile(path.join(publicDir, 'join.htm
 app.get('/:slug/board', (req, res) => res.sendFile(path.join(publicDir, 'board.html')));
 app.get('/:slug/team/:teamId', (req, res) => res.sendFile(path.join(publicDir, 'team.html')));
 app.use(express.static(publicDir));
+
+// Shorthand: /{slug} shows the event's board (e.g. /london-26). Registered
+// after static so real files always win; unknown slugs fall through to 404.
+app.get('/:slug', async (req, res, next) => {
+  if (!/^[a-z0-9-]+$/.test(req.params.slug)) return next();
+  try {
+    const { rows } = await pool.query('SELECT 1 FROM events WHERE slug = $1', [req.params.slug]);
+    if (!rows[0]) return next();
+    res.sendFile(path.join(publicDir, 'board.html'));
+  } catch (err) { next(err); }
+});
 
 app.use((err, req, res, next) => {
   console.error(err);
