@@ -68,6 +68,16 @@ export async function ingestHandler(req, res) {
   const note = (m) => (res.locals.notes = res.locals.notes || []).push(m);
   const fix = parseFix(req);
   if (!fix) return res.status(400).send('no coordinates');
+  if (Math.abs(fix.lat) > 90 || Math.abs(fix.lng) > 180) {
+    return res.status(400).send('coordinates out of range');
+  }
+  // Device clock skew: a fix "from the future" would poison lap timing —
+  // clamp to server time. (Past timestamps are legitimate: Traccar buffers
+  // fixes offline and replays them in order on reconnect.)
+  if (fix.timestampMs > Date.now() + 5 * 60_000) {
+    note('future timestamp clamped to server time');
+    fix.timestampMs = Date.now();
+  }
 
   const { rows } = await pool.query(
     `SELECT d.*, t.active_device_id, e.zones, e.config AS event_config, e.start_at, e.end_at, e.paused_at

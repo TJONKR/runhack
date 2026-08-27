@@ -18,6 +18,40 @@ router.get('/ingest-log', (req, res) => {
   res.json(readIngestLog());
 });
 
+// Stored-GPS health check: what actually landed in the points table, per
+// device — proves storage/parsing worked, not just that requests arrived.
+router.get('/events/:slug/points-summary', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT d.id, COALESCE(m.name, d.name, 'Team device') AS label, t.name AS team,
+            count(p.id)::int AS points,
+            min(p.fixed_at) AS first_fix, max(p.fixed_at) AS last_fix,
+            round(avg(p.accuracy_m)::numeric, 1) AS avg_acc,
+            max(p.accuracy_m) AS worst_acc,
+            count(*) FILTER (WHERE p.accuracy_m IS NULL)::int AS null_acc,
+            count(*) FILTER (WHERE p.speed_ms IS NOT NULL)::int AS with_speed,
+            count(*) FILTER (WHERE p.fixed_at > p.received_at + interval '1 minute')::int AS future_ts
+       FROM devices d
+       JOIN teams t ON t.id = d.team_id
+       LEFT JOIN members m ON m.id = d.member_id
+       LEFT JOIN points p ON p.device_id = d.id
+      WHERE d.event_id = (SELECT id FROM events WHERE slug = $1)
+      GROUP BY d.id, label, t.name
+      ORDER BY points DESC`,
+    [req.params.slug]
+  );
+  res.json(rows);
+});
+
+// Raw recent points for a device — eyeball exactly what was stored.
+router.get('/devices/:deviceId/points', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT lat, lng, accuracy_m, speed_ms, fixed_at, received_at
+       FROM points WHERE device_id = $1 ORDER BY id DESC LIMIT 50`,
+    [req.params.deviceId]
+  );
+  res.json(rows);
+});
+
 // Event-scoped view of the ingest log: this event's device pings, plus every
 // unmatched attempt (unknown token, missing token, /ingest-test) — those are
 // the failures you're debugging, so they show everywhere.

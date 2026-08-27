@@ -64,6 +64,7 @@ export async function initDb() {
       received_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS points_member_time ON points (member_id, fixed_at);
+    CREATE INDEX IF NOT EXISTS points_device_time ON points (device_id, fixed_at);
 
     CREATE TABLE IF NOT EXISTS devices (
       id          serial PRIMARY KEY,

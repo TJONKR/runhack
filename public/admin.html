@@ -168,6 +168,8 @@
 
     <div class="etab" id="tab-setup">
       <div class="wrap">
+        <h2>Setup checklist</h2>
+        <div class="card" id="checklist"></div>
         <h2>Race</h2>
         <div class="card">
           <div class="row">
@@ -301,6 +303,12 @@
             <button onclick="copyText(document.getElementById('testUrl').textContent, this)">copy</button></div>
           <span class="muted">Real device pings for this event appear here too, plus any request with a
             missing or unknown token (red) — those are Traccar misconfigurations.</span>
+        </div>
+        <div class="card">
+          <div class="row"><span class="muted" style="flex:1"><b>Stored GPS (database)</b> — what actually
+            landed in the points table per device</span>
+            <button onclick="loadGpsSummary(this)">check</button></div>
+          <div id="gpsSummary" class="muted" style="font-family:'Geist Mono',monospace;font-size:11px"></div>
         </div>
         <div class="row">
           <input type="text" id="logFilter" placeholder="filter (token, team, text…)" style="flex:1"
@@ -547,6 +555,7 @@ function renderSetup() {
   pubBtn.textContent = cur.published ? 'Unpublish (back to draft)' : '🚀 Publish to landing';
   pubBtn.className = cur.published ? '' : 'primary';
   pubBtn.onclick = () => control(cur.published ? 'unpublish' : 'publish');
+  renderChecklist();
   const linkRow = (label, url) => `
     <span class="muted">${label}</span>
     <div class="row"><div class="url" style="flex:1;margin:2px 0">${url}</div>
@@ -568,6 +577,37 @@ async function renameSlug() {
   if (!r.ok) return alert('failed: ' + (await r.text()));
   await loadEvents?.();
   go(v.trim(), 'setup');
+}
+function renderChecklist() {
+  const zonesOk = (cur.zones || []).length >= 2;
+  const gateOk = !!cur.config?.gate;
+  const timesOk = !!cur.start_at && !!cur.end_at;
+  const teams = cur.teams || [];
+  const teamsOk = teams.length > 0;
+  const reposOk = teams.length > 0 && teams.every((t) => t.repo_status === 'connected');
+  const devicesOk = teams.some((t) => Number(t.connected_count) > 0);
+  const pubOk = !!cur.published;
+  const item = (ok, label, tab, hint = '') => `
+    <div class="row" style="font-size:13px">
+      <span style="color:${ok ? 'var(--ok)' : 'var(--gold)'};width:18px">${ok ? '✓' : '○'}</span>
+      <span style="flex:1">${label}${hint ? ` <span class="muted">${hint}</span>` : ''}</span>
+      ${ok || !tab ? '' : `<button onclick="go(cur.slug, '${tab}')">go →</button>`}
+    </div>`;
+  document.getElementById('checklist').innerHTML =
+    item(zonesOk, 'Draw the two geofence zones on the venue walk', 'map',
+      '(start/finish + back straight, overshoot the track edge 10–15m)') +
+    item(gateOk, 'Draw the timing gate (optional)', 'map', '(a line across the track inside the start box)') +
+    item(timesOk, 'Set start & end times', null, '(below — or use Start now on the day)') +
+    item(teamsOk, `Create the teams${teams.length ? ` (${teams.length})` : ''}`, 'teams') +
+    item(reposOk, 'Every team\u2019s GitHub repo connected + tested', 'teams',
+      '(the test button on each team card)') +
+    item(devicesOk, 'At least one phone connected and pinging', 'logs',
+      '(scan a team QR, connect Traccar, watch the Logs tab)') +
+    item(pubOk, 'Publish to the landing page when ready', null, '(button above in Race)') +
+    `<div class="muted" style="margin-top:8px;font-size:12px">
+      Day-of quick reference: handoff on a shared phone = just pass it. Separate phones = Make active
+      on the team page. Fix anything in Teams (laps, scores) or Runners (devices). Pause/End in Race
+      above. Watch pings live in Logs.</div>`;
 }
 async function saveEvent() {
   const body = {
@@ -929,6 +969,27 @@ function logFocus(i) {
   logFocusMarker = L.circleMarker(ll, { radius: 11, color: '#F0BE2A', fill: false, weight: 3 }).addTo(logMap);
 }
 
+async function loadGpsSummary(btn) {
+  if (btn) btn.textContent = '…';
+  const r = await fetch(`/api/admin/events/${cur.slug}/points-summary`, { headers: H() });
+  if (btn) btn.textContent = 'check';
+  if (!r.ok) return;
+  const rows = await r.json();
+  document.getElementById('gpsSummary').innerHTML = rows.map((d) => {
+    const last = d.last_fix ? new Date(d.last_fix).toLocaleTimeString() : '—';
+    const warn = [];
+    if (d.points && d.null_acc === d.points) warn.push('no accuracy values');
+    if (d.future_ts > 0) warn.push(`${d.future_ts} future timestamps`);
+    return `<div class="row" style="border-top:1px solid var(--line);padding:4px 0">
+      <span style="flex:1"><b>${d.label}</b> · ${d.team}</span>
+      <span>${d.points} pts</span>
+      <span>acc avg ${d.avg_acc ?? '—'}m worst ${d.worst_acc ?? '—'}m</span>
+      <span>speed ${d.with_speed}/${d.points}</span>
+      <span class="muted">last ${last}</span>
+      ${warn.length ? `<span style="color:var(--orange)">${warn.join(' · ')}</span>` : ''}
+    </div>`;
+  }).join('') || 'No devices yet.';
+}
 let logEntries = [];
 async function loadLogs() {
   if (!cur) return;
