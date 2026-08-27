@@ -862,9 +862,11 @@ async function loadRoster() {
       : `ping ${d.lastPingAgoS}s`;
     const label = d.member_name || d.name || 'Team device';
     const state = d.is_active ? '<b style="color:var(--ok)">ACTIVE</b>' : d.activated_at ? 'standby' : 'not connected';
+    const batt = d.battery == null ? ''
+      : ` · <span style="color:${d.battery <= 20 && !d.charging ? 'var(--orange)' : 'inherit'}">🔋${Math.round(d.battery)}%${d.charging ? '⚡' : ''}</span>`;
     const traccar = `org.traccar.client://config?url=${encodeURIComponent(location.origin + '/ingest/' + d.token)}&id=${d.token}&accuracy=highest&interval=2&distance=0`;
     return `<div class="card"><div class="row" style="font-size:12px">
-      <span style="flex:1;min-width:200px">${d.team} · <b>${label}</b> <span class="muted">#${d.id}</span> · ${state} · ${d.lap_count} laps · ${ping}</span>
+      <span style="flex:1;min-width:200px">${d.team} · <b>${label}</b> <span class="muted">#${d.id}</span> · ${state} · ${d.lap_count} laps · ${ping}${batt}</span>
       <button onclick="copyText('${traccar}', this)" title="copy the Traccar config link — open on the phone to (re)connect it">cfg</button>
       <button onclick="renameDevice(${d.id}, '${(d.name || '').replace(/'/g, "\\'")}')">rename</button>
       <button onclick="assignDevice(${d.id}, ${d.team_id})" title="link this device to a person (credits their laps)">assign</button>
@@ -1114,7 +1116,10 @@ async function refreshLive() {
     liveMarkers[d.id]
       .setLatLng([d.lat, d.lng])
       .setStyle({ color: col, fillColor: col, fillOpacity: stale ? 0.15 : 0.85, opacity: stale ? 0.4 : 1 })
-      .setTooltipContent(`${label} · ${d.team} · ${d.lap_count} laps${stale ? ' · signal lost' : ''}`);
+      .setTooltipContent(`${label} · ${d.team} · ${d.lap_count} laps` +
+        (d.speedMs != null && !stale ? ` · ${(d.speedMs * 3.6).toFixed(1)} km/h` : '') +
+        (d.battery != null ? ` · 🔋${Math.round(d.battery)}%` : '') +
+        (stale ? ' · signal lost' : ''));
   });
   Object.keys(liveMarkers).forEach((id) => {
     if (!seen.has(+id)) { map.removeLayer(liveMarkers[id]); delete liveMarkers[id]; }

@@ -233,6 +233,8 @@ router.get('/:slug/team/:teamId', async (req, res) => {
       connected: !!d.activated_at,
       laps: d.lap_count,
       lastPingAgoS: d.last_fix?.at ? Math.round((Date.now() - d.last_fix.at) / 1000) : null,
+      battery: d.last_fix?.battery ?? null,
+      charging: d.last_fix?.charging ?? null,
     })),
   });
 });

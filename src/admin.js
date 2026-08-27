@@ -257,6 +257,9 @@ router.get('/events/:slug/devices', async (req, res) => {
     lastPingAgoS: d.last_fix?.at ? Math.round((Date.now() - d.last_fix.at) / 1000) : null,
     lat: d.last_fix?.lat ?? null,
     lng: d.last_fix?.lng ?? null,
+    battery: d.last_fix?.battery ?? null,
+    charging: d.last_fix?.charging ?? null,
+    speedMs: d.last_fix?.speedMs ?? null,
     last_fix: undefined,
   })));
 });

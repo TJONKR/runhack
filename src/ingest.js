@@ -39,6 +39,8 @@ function parseFix(req) {
     timestampMs,
     accuracyM: num(p.accuracy ?? p.acc ?? coords.accuracy ?? p.hdop),
     speedMs: speedKn == null ? null : speedKn * 0.514444,
+    battery: num(p.batt ?? p.battery ?? p.batteryLevel),
+    charging: p.charge === 'true' || p.charge === true || undefined,
   };
 }
 
@@ -99,7 +101,7 @@ export async function ingestHandler(req, res) {
   // a non-active device takes over only if the active one has gone silent
   // (dead battery / closed app) — otherwise its pings are recorded for ops
   // visibility but don't drive the lap engine.
-  const fixJson = { lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM, speedMs: fix.speedMs, at: fix.timestampMs };
+  const fixJson = { lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM, speedMs: fix.speedMs, at: fix.timestampMs, battery: fix.battery, charging: fix.charging };
   if (device.active_device_id !== device.id) {
     let takeOver = device.active_device_id == null;
     if (!takeOver) {

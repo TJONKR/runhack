@@ -171,8 +171,9 @@ async function tick() {
     document.getElementById('devices').innerHTML = (t.devices || []).map((d) => {
       const stale = d.lastPingAgoS == null || d.lastPingAgoS > 60;
       const cls = d.active && !stale ? 'active' : 'frozen';
-      const tag = d.active ? (stale ? 'active · signal lost' : `tracking · ping ${d.lastPingAgoS}s`)
+      let tag = d.active ? (stale ? 'active · signal lost' : `tracking · ping ${d.lastPingAgoS}s`)
         : d.connected ? (stale ? 'standby · quiet' : 'standby') : 'never pinged';
+      if (d.battery != null) tag += ` · 🔋${Math.round(d.battery)}%${d.charging ? '⚡' : ''}`;
       const btn = d.active ? '' :
         `<button onclick="makeActive(${d.id})" style="font-family:'Geist Mono',monospace;font-size:9px;
            letter-spacing:0.12em;text-transform:uppercase;background:transparent;color:var(--gold);
