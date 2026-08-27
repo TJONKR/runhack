@@ -13,6 +13,12 @@ import QRCode from 'qrcode';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', 'public');
 
+// Backstop: Express 4 does not route async rejections to the error
+// middleware, and an unhandled one kills the process — a full outage from
+// one bad request. Log loudly, stay up.
+process.on('unhandledRejection', (err) => console.error('UNHANDLED REJECTION (request likely hung):', err));
+process.on('uncaughtException', (err) => console.error('UNCAUGHT EXCEPTION (kept alive):', err));
+
 const app = express();
 app.set('trust proxy', 1);
 app.use(express.json());

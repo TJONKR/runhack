@@ -5,6 +5,10 @@ import { readIngestLog } from './ingestLog.js';
 
 const router = Router();
 
+for (const p of ['teamId', 'deviceId', 'memberId', 'lapId']) {
+  router.param(p, (req, res, next, v) => (/^\d+$/.test(v) ? next() : res.status(404).json({ error: 'not found' })));
+}
+
 router.use((req, res, next) => {
   const key = req.headers.authorization?.replace(/^Bearer /, '') || req.query.key;
   if (!process.env.ADMIN_KEY || key !== process.env.ADMIN_KEY) {

@@ -5,6 +5,12 @@ import { parseRepo } from './github.js';
 
 const router = Router();
 
+// Numeric id params must actually be numeric — otherwise Postgres throws on
+// the integer cast (and a junk URL must never become a 500, let alone worse).
+for (const p of ['teamId', 'deviceId']) {
+  router.param(p, (req, res, next, v) => (/^\d+$/.test(v) ? next() : res.status(404).json({ error: 'not found' })));
+}
+
 // Light per-IP limit on the public write endpoints (member/device creation,
 // device activation) — enough to stop scripted spam without touching real use.
 const writeBuckets = new Map();
