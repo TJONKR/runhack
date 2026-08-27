@@ -93,7 +93,7 @@
         set these manually in Traccar and start the service:</p>
       <p class="muted">Server URL: <code id="manualUrl"></code><br>
          Device identifier: <code id="manualId"></code><br>
-         Accuracy: highest · Interval: 2s · Distance: 0</p>
+         Accuracy: high · Interval: 2s · Distance: 10m</p>
     </div>
     <div class="status" style="font-weight:400;font-size:15px" id="waiting">
       <span class="spin"></span>Waiting for your first GPS ping…</div>
@@ -191,7 +191,7 @@ function ingestUrl() { return `${location.origin}/ingest/${token}`; }
 
 function openTraccar() {
   const cfg = `org.traccar.client://config?url=${encodeURIComponent(ingestUrl())}` +
-    `&id=${token}&accuracy=highest&interval=2&distance=0`;
+    `&id=${token}&accuracy=high&interval=2&distance=10`;
   location.href = cfg;
 }
 function showManual() { document.getElementById('manual').style.display = 'block'; }
