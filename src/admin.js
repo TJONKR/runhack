@@ -5,8 +5,16 @@ import { readIngestLog } from './ingestLog.js';
 
 const router = Router();
 
+// Body values destined for integer columns: returns a safe int or null —
+// never NaN/garbage that Postgres would throw on (see the /team/test crash).
+function intOr(v, fallback = null) {
+  const n = Number(v);
+  return Number.isInteger(n) && Math.abs(n) < 2_000_000_000 ? n : fallback;
+}
+
+
 for (const p of ['teamId', 'deviceId', 'memberId', 'lapId']) {
-  router.param(p, (req, res, next, v) => (/^\d+$/.test(v) ? next() : res.status(404).json({ error: 'not found' })));
+  router.param(p, (req, res, next, v) => (/^\d{1,9}$/.test(v) ? next() : res.status(404).json({ error: 'not found' })));
 }
 
 router.use((req, res, next) => {
@@ -277,7 +285,8 @@ router.patch('/devices/:deviceId', async (req, res) => {
     await pool.query('UPDATE devices SET name = $1 WHERE id = $2', [req.body.name?.trim() || null, d.rows[0].id]);
   }
   if ('memberId' in req.body) {
-    const mid = req.body.memberId || null;
+    const mid = req.body.memberId ? intOr(req.body.memberId) : null;
+    if (req.body.memberId && mid == null) return res.status(400).json({ error: 'memberId must be a number' });
     if (mid) {
       const m = await pool.query('SELECT id FROM members WHERE id = $1 AND team_id = $2', [mid, d.rows[0].team_id]);
       if (!m.rows[0]) return res.status(404).json({ error: 'no such member on this team' });
@@ -332,7 +341,7 @@ router.patch('/events/:slug/teams/:teamId', async (req, res) => {
   }
   if ('commitOverride' in req.body) {
     const v = req.body.commitOverride;
-    add('commit_override = ?', v === null || v === '' ? null : Math.max(0, Math.round(Number(v))));
+    add('commit_override = ?', v === null || v === '' ? null : Math.max(0, intOr(Math.round(Number(v)), 0)));
   }
   if ('scoreAdjust' in req.body) add('score_adjust = ?', Number(req.body.scoreAdjust) || 0);
   if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
@@ -383,9 +392,10 @@ router.patch('/members/:memberId', async (req, res) => {
   if ('name' in req.body && req.body.name?.trim()) {
     await pool.query('UPDATE members SET name = $1 WHERE id = $2', [req.body.name.trim(), member.id]);
   }
-  if ('teamId' in req.body && Number(req.body.teamId) !== member.team_id) {
+  if ('teamId' in req.body && intOr(req.body.teamId) !== member.team_id) {
+    if (intOr(req.body.teamId) == null) return res.status(400).json({ error: 'teamId must be a number' });
     const t = await pool.query('SELECT id FROM teams WHERE id = $1 AND event_id = $2', [
-      req.body.teamId, member.event_id,
+      intOr(req.body.teamId), member.event_id,
     ]);
     if (!t.rows[0]) return res.status(404).json({ error: 'no such team in this event' });
     await pool.query('UPDATE members SET team_id = $1 WHERE id = $2', [t.rows[0].id, member.id]);

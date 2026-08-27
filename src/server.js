@@ -126,6 +126,11 @@ app.get('/:slug', async (req, res, next) => {
 });
 
 app.use((err, req, res, next) => {
+  // malformed request bodies are the client's fault, not a server error
+  if (err.type === 'entity.parse.failed' || err.status === 400 || err.statusCode === 400) {
+    return res.status(400).json({ error: 'bad request body' });
+  }
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'body too large' });
   console.error(err);
   res.status(500).json({ error: 'internal error' });
 });

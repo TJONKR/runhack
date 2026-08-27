@@ -5,10 +5,18 @@ import { parseRepo } from './github.js';
 
 const router = Router();
 
+// Body values destined for integer columns: returns a safe int or null —
+// never NaN/garbage that Postgres would throw on (see the /team/test crash).
+function intOr(v, fallback = null) {
+  const n = Number(v);
+  return Number.isInteger(n) && Math.abs(n) < 2_000_000_000 ? n : fallback;
+}
+
+
 // Numeric id params must actually be numeric — otherwise Postgres throws on
 // the integer cast (and a junk URL must never become a 500, let alone worse).
 for (const p of ['teamId', 'deviceId']) {
-  router.param(p, (req, res, next, v) => (/^\d+$/.test(v) ? next() : res.status(404).json({ error: 'not found' })));
+  router.param(p, (req, res, next, v) => (/^\d{1,9}$/.test(v) ? next() : res.status(404).json({ error: 'not found' })));
 }
 
 // Light per-IP limit on the public write endpoints (member/device creation,
@@ -64,7 +72,8 @@ router.post('/:slug/members', publicWriteLimit, async (req, res) => {
   const event = rows[0];
   if (!event) return res.status(404).json({ error: 'no such event' });
 
-  const { teamId, name } = req.body;
+  const teamId = intOr(req.body.teamId);
+  const { name } = req.body;
   if (!teamId || !name?.trim()) return res.status(400).json({ error: 'teamId and name required' });
 
   const team = await pool.query('SELECT id FROM teams WHERE id = $1 AND event_id = $2', [
@@ -97,7 +106,10 @@ router.post('/:slug/devices', publicWriteLimit, async (req, res) => {
   const { rows } = await pool.query('SELECT id FROM events WHERE slug = $1', [req.params.slug]);
   const event = rows[0];
   if (!event) return res.status(404).json({ error: 'no such event' });
-  const { teamId, memberId = null, name = null } = req.body;
+  const teamId = intOr(req.body.teamId);
+  const memberId = req.body.memberId ? intOr(req.body.memberId) : null;
+  const { name = null } = req.body;
+  if (!teamId || (req.body.memberId && memberId == null)) return res.status(400).json({ error: 'numeric teamId (and memberId) required' });
   const team = await pool.query('SELECT id FROM teams WHERE id = $1 AND event_id = $2', [teamId, event.id]);
   if (!team.rows[0]) return res.status(404).json({ error: 'no such team in this event' });
   if (memberId) {
