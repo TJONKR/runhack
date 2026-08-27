@@ -13,23 +13,26 @@ so event-week deploys carry zero risk to the app.
 
 People and devices are separate things:
 
-1. Each runner scans the **team QR** → `/{event}/join?team=N` → registers
+1. An event can optionally allow participants to create a team from the join
+   page. The creator supplies the team name, their name, and the team's public
+   GitHub repo in one step. Otherwise, an admin creates teams in advance.
+2. Each runner scans the **team QR** → `/{event}/join?team=N` → registers
    **once** (a member).
-2. Any phone that will track gets registered as a **device** — linked to a
+3. Any phone that will track gets registered as a **device** — linked to a
    person (credits their laps) or to the team (shared phone). The server
    mints an unguessable token and deep-links into
    [Traccar Client](https://www.traccar.org/client/) (free, App Store +
    Play) with the ingest URL and that token as Traccar's device identifier.
-3. Traccar streams GPS to `POST /ingest/{token}` (OsmAnd protocol — query,
+4. Traccar streams GPS to `POST /ingest/{token}` (OsmAnd protocol — query,
    form, or JSON). Every ping self-identifies: token → team (+ person).
-4. **One scoring device per team.** The first device to ping becomes the
+5. **One scoring device per team.** The first device to ping becomes the
    team's tracker; other devices ping in standby. Handoff on a shared phone
    needs no action at all — just pass it. Multi-phone handoff = tap "Make
    active" on the team page (or admin); if the active device goes silent for
    90s, a standby device auto-takes-over. A team can never record two laps
    closer together than a possible lap time, so switchovers can't
    double-count.
-5. All lap logic runs server-side: geofence zone sequence, dwell rules,
+6. All lap logic runs server-side: geofence zone sequence, dwell rules,
    accuracy gating, pace window, leaderboard, GitHub commit polling.
 
 ## Lap detection & timing
@@ -78,10 +81,12 @@ GitHub's 60 req/hr IP limit breaks at even a handful of teams. The admin
 | `/{event}/board` | venue big-screen board |
 | `/api/{event}/board` | public JSON board — poll every 2–5s |
 | `/api/{event}/team/N` | public team JSON |
+| `POST /api/{event}/teams` | public team + first-runner creation when enabled |
 | `/ingest/{userId}` | Traccar ingest |
 
-The board page/API and team pages are public; everything mutating sits
-behind `/api/admin/*`.
+The board page/API and team pages are public. Member/device registration,
+device switching, and opt-in team creation are public writes with rate limits;
+race control and corrections sit behind `/api/admin/*`.
 
 ## Race control (`/admin`)
 
@@ -89,7 +94,8 @@ Events are the top level — dev, London, SF are just rows (Live / Scheduled /
 Drafts / Finished, with quick **Start now**). Inside an event:
 
 - **Setup** — start/end times, lifecycle (start/pause/resume/end now), lap +
-  scoring config, links, danger zone (reset race data / delete event).
+  scoring config, participant team-creation switch, links, danger zone
+  (reset race data / delete event).
 - **Teams** — readiness chip (≥3 runners, ≥1 device pinged, GitHub verified),
   repo test/status, manual laps, per-lap valid↔invalid flips and time edits,
   commit override, score adjust, copy join/QR links.
@@ -107,7 +113,8 @@ Drafts / Finished, with quick **Start now**). Inside an event:
    (`render.yaml` creates the web service + Postgres; schema auto-creates).
 2. Set `ADMIN_KEY` (and ideally `GITHUB_TOKEN`) in the service env.
 3. Custom domain, e.g. `runhack.roxfit.app` (CNAME per Render's instructions).
-4. Open `/admin`, create the event, draw zones on the venue walk, add teams.
+4. Open `/admin`, create the event, draw zones on the venue walk, then add
+   teams or enable participant team creation.
 
 Running cost: Render starter web service + Postgres (~$14/mo). Free-tier
 instances sleep on idle, which kills live ingest — don't downgrade.

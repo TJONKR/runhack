@@ -219,6 +219,10 @@
                 <option value="entry_entry">box entry → entry</option>
               </select></label>
           </div>
+          <label class="muted" style="display:flex;align-items:center;gap:8px;margin-top:14px">
+            <input type="checkbox" id="cfgSelfServiceTeams" style="width:auto">
+            Allow participants to create teams while this event is published and open
+          </label>
           <p class="muted">Laps are timed from leaving the start box to returning, so min/max lap s
             apply to the <b>timed segment</b> (≈ lap − start box; 7:00/km over 350m = 147s).
             Laps outside start–end are recorded but invalid. Commits count from start.
@@ -542,6 +546,7 @@ function renderSetup() {
   cfgFormula.value = c.scoreFormula ?? 'km_x_commits'; cfgWeight.value = c.commitWeight ?? 0.1;
   cfgOfficial.value = c.officialTiming ?? 'exit_entry';
   cfgCap.value = c.commitCap ?? '';
+  cfgSelfServiceTeams.checked = c.selfServiceTeams === true;
   evStart.value = toLocalInput(cur.start_at); evEnd.value = toLocalInput(cur.end_at);
   document.getElementById('raceStatus').innerHTML =
     `status: <b style="color:${statusColour[statusOf(cur)]}">${statusOf(cur)}</b>`;
@@ -598,7 +603,11 @@ function renderChecklist() {
       '(start/finish + back straight, overshoot the track edge 10–15m)') +
     item(gateOk, 'Draw the timing gate (optional)', 'map', '(a line across the track inside the start box)') +
     item(timesOk, 'Set start & end times', null, '(below — or use Start now on the day)') +
-    item(teamsOk, `Create the teams${teams.length ? ` (${teams.length})` : ''}`, 'teams') +
+    item(teamsOk,
+      cur.config?.selfServiceTeams
+        ? `At least one team has registered${teams.length ? ` (${teams.length})` : ''}`
+        : `Create the teams${teams.length ? ` (${teams.length})` : ''}`,
+      'teams') +
     item(reposOk, 'Every team\u2019s GitHub repo connected + tested', 'teams',
       '(the test button on each team card)') +
     item(devicesOk, 'At least one phone connected and pinging', 'logs',
@@ -625,6 +634,7 @@ async function saveEvent() {
       scoreFormula: cfgFormula.value, commitWeight: +cfgWeight.value,
       commitCap: cfgCap.value ? +cfgCap.value : null,
       officialTiming: cfgOfficial.value,
+      selfServiceTeams: cfgSelfServiceTeams.checked,
     },
   };
   const r = await fetch('/api/admin/events', { method: 'POST', headers: H(), body: JSON.stringify(body) });

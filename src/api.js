@@ -20,6 +20,28 @@ function publicWriteLimit(req, res, next) {
   next();
 }
 
+const teamCreateBuckets = new Map();
+function publicTeamCreateLimit(req, res, next) {
+  const ip = req.ip || 'unknown';
+  const now = Date.now();
+  let b = teamCreateBuckets.get(ip);
+  if (!b || now - b.start > 60 * 60_000) {
+    b = { start: now, count: 0 };
+    teamCreateBuckets.set(ip, b);
+  }
+  if (++b.count > 5) return res.status(429).json({ error: 'too many teams created — try again later' });
+  next();
+}
+
+export function canCreatePublicTeam(event, now = Date.now()) {
+  const status = eventStatus(event, now);
+  return (
+    event.published === true &&
+    event.config?.selfServiceTeams === true &&
+    (status === 'upcoming' || status === 'live')
+  );
+}
+
 // Public list of events for the landing page: PUBLISHED events only.
 // Drafts stay reachable at their direct URLs (for private testing) but are
 // never listed publicly; admins see everything in /admin.
@@ -41,7 +63,7 @@ router.get('/events', async (req, res) => {
 // Public event info for the join page: teams to pick from, no member data.
 router.get('/:slug/info', async (req, res) => {
   const { rows } = await pool.query(
-    'SELECT id, slug, name FROM events WHERE slug = $1',
+    'SELECT id, slug, name, published, config, start_at, end_at, paused_at FROM events WHERE slug = $1',
     [req.params.slug]
   );
   if (!rows[0]) return res.status(404).json({ error: 'no such event' });
@@ -49,7 +71,57 @@ router.get('/:slug/info', async (req, res) => {
     "SELECT id, name, (repo_url IS NOT NULL AND repo_url <> '') AS has_repo FROM teams WHERE event_id = $1 ORDER BY name",
     [rows[0].id]
   );
-  res.json({ slug: rows[0].slug, name: rows[0].name, teams: teams.rows });
+  res.json({
+    slug: rows[0].slug,
+    name: rows[0].name,
+    teams: teams.rows,
+    canCreateTeam: canCreatePublicTeam(rows[0]),
+  });
+});
+
+// Create a team and its first runner in one transaction. Events opt in to
+// this flow explicitly; admin-created teams remain available either way.
+router.post('/:slug/teams', publicTeamCreateLimit, async (req, res, next) => {
+  const { rows } = await pool.query('SELECT * FROM events WHERE slug = $1', [req.params.slug]);
+  const event = rows[0];
+  if (!event) return res.status(404).json({ error: 'no such event' });
+  if (!canCreatePublicTeam(event)) {
+    return res.status(403).json({ error: 'team creation is not open for this event' });
+  }
+
+  const teamName = typeof req.body.teamName === 'string' ? req.body.teamName.trim() : '';
+  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  const repoUrl = typeof req.body.repoUrl === 'string' ? req.body.repoUrl.trim() : '';
+  if (teamName.length < 2 || teamName.length > 60) {
+    return res.status(400).json({ error: 'team name must be 2–60 characters' });
+  }
+  if (!name || name.length > 80) {
+    return res.status(400).json({ error: 'runner name must be 1–80 characters' });
+  }
+  if (repoUrl.length > 300 || !parseRepo(repoUrl)) {
+    return res.status(400).json({ error: 'repoUrl must be a public github.com repo' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const team = await client.query(
+      'INSERT INTO teams (event_id, name, repo_url) VALUES ($1, $2, $3) RETURNING id',
+      [event.id, teamName, repoUrl]
+    );
+    const member = await client.query(
+      'INSERT INTO members (event_id, team_id, name) VALUES ($1, $2, $3) RETURNING id',
+      [event.id, team.rows[0].id, name]
+    );
+    await client.query('COMMIT');
+    res.status(201).json({ teamId: team.rows[0].id, memberId: member.rows[0].id });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (err.code === '23505') return res.status(409).json({ error: 'that team name is already taken' });
+    next(err);
+  } finally {
+    client.release();
+  }
 });
 
 // Register a person on a team (once — devices are registered separately).

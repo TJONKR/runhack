@@ -58,16 +58,20 @@
   <h1 id="eventName">RUN/HACK</h1>
 
   <div class="step active" id="step-register">
-    <label>Team</label>
-    <select id="team"></select>
-    <label>Your name</label>
-    <input id="name" placeholder="runner name" autocomplete="off">
-    <div id="repoWrap" style="display:none">
-      <label>Team GitHub repo (public — commits count toward your score)</label>
-      <input id="repo" placeholder="https://github.com/you/project" autocomplete="off" inputmode="url">
+    <div id="existingTeamForm">
+      <label>Team</label>
+      <select id="team"></select>
+      <label>Your name</label>
+      <input id="name" placeholder="runner name" autocomplete="off" maxlength="80">
+      <div id="repoWrap" style="display:none">
+        <label>Team GitHub repo (public — commits count toward your score)</label>
+        <input id="repo" placeholder="https://github.com/you/project" autocomplete="off" inputmode="url">
+      </div>
+      <button onclick="register()">Join the team →</button>
+      <button class="secondary" onclick="openDeviceStep()">Already joined? Set up tracking on this phone</button>
     </div>
-    <button onclick="register()">Join the team →</button>
-    <button class="secondary" onclick="openDeviceStep()">Already joined? Set up tracking on this phone</button>
+    <p class="muted" id="noTeams" style="display:none">No teams have registered yet.</p>
+    <button class="secondary" id="createTeamBtn" style="display:none" onclick="show('step-create-team')">Create a new team</button>
     <p class="muted">Register once. Tracking is per phone — set it up next, and pass the phone (or
       switch devices) at handovers.</p>
 
@@ -87,6 +91,19 @@
         head out. <b>Keep the tracking phone charged</b> — the board shows your battery so the
         marshals will nag you.</p>
     </div>
+  </div>
+
+  <div class="step" id="step-create-team">
+    <div class="status">Create your team</div>
+    <label>Team name</label>
+    <input id="newTeamName" placeholder="team name" autocomplete="off" maxlength="60">
+    <label>Your name</label>
+    <input id="newTeamRunner" placeholder="runner name" autocomplete="off" maxlength="80">
+    <label>Team GitHub repo (public — commits count toward your score)</label>
+    <input id="newTeamRepo" placeholder="https://github.com/you/project" autocomplete="off" inputmode="url" maxlength="300">
+    <button onclick="createTeam()">Create team →</button>
+    <button class="secondary" onclick="show('step-register')">Back to existing teams</button>
+    <p class="muted">This creates the team and registers you as its first runner. An event admin can rename or remove the team if needed.</p>
   </div>
 
   <div class="step" id="step-device">
@@ -147,6 +164,9 @@ async function init() {
   const preTeam = params.get('team');
   const sel = document.getElementById('team');
   sel.innerHTML = info.teams.map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
+  document.getElementById('existingTeamForm').style.display = info.teams.length ? '' : 'none';
+  document.getElementById('noTeams').style.display = info.teams.length ? 'none' : '';
+  document.getElementById('createTeamBtn').style.display = info.canCreateTeam ? '' : 'none';
   if (preTeam) {
     const match = info.teams.find((t) => String(t.id) === preTeam || t.name === preTeam);
     if (match) sel.value = match.id;
@@ -157,6 +177,30 @@ async function init() {
   };
   sel.onchange = updateRepoField;
   updateRepoField();
+}
+
+async function createTeam() {
+  const teamName = document.getElementById('newTeamName').value.trim();
+  const name = document.getElementById('newTeamRunner').value.trim();
+  const repoUrl = document.getElementById('newTeamRepo').value.trim();
+  if (!teamName) return alert('Enter a team name');
+  if (!name) return alert('Enter your name');
+  if (!repoUrl) return alert('Enter your public GitHub repo');
+  let r;
+  try { r = await fetch(`/api/${slug}/teams`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ teamName, name, repoUrl }),
+  }); } catch { return alert('No connection — check signal and try again.'); }
+  if (!r.ok) {
+    const body = await r.json().catch(() => null);
+    return alert('Team creation failed: ' + (body?.error || r.statusText));
+  }
+  const created = await r.json();
+  const sel = document.getElementById('team');
+  sel.add(new Option(teamName, created.teamId, true, true));
+  newMemberId = created.memberId;
+  openDeviceStep();
 }
 
 // Step 1: register a person (once).
