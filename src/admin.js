@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { pool } from './db.js';
 import { countCommits, pollOnce } from './github.js';
-import { readIngestLog } from './ingestLog.js';
+import { readIngestLog, clearIngestLog } from './ingestLog.js';
 
 const router = Router();
 
@@ -28,6 +28,10 @@ router.use((req, res, next) => {
 // Live ingest debug log (in-memory, newest first) — for testing Traccar.
 router.get('/ingest-log', (req, res) => {
   res.json(readIngestLog());
+});
+router.post('/ingest-log/clear', (req, res) => {
+  clearIngestLog();
+  res.json({ ok: true });
 });
 
 // Stored-GPS health check: what actually landed in the points table, per

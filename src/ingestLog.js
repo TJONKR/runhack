@@ -12,3 +12,7 @@ export function pushIngestLog(entry) {
 export function readIngestLog() {
   return [...buf].reverse(); // newest first
 }
+
+export function clearIngestLog() {
+  buf.length = 0;
+}

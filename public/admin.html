@@ -88,12 +88,42 @@
   #map { position: absolute; inset: 0; }
   #legend { position: absolute; top: 12px; right: 12px; z-index: 1000; background: rgba(8,24,47,0.92);
             border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; min-width: 180px;
-            font-size: 12px; }
+            font-size: 12px; max-height: calc(100% - 60px); overflow-y: auto; }
   #legend .lrow { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
   #legend .ldot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
   #legend .lstale { opacity: 0.4; }
   #legend h3 { font-family: 'Geist Mono', monospace; font-size: 9px; letter-spacing: 0.2em;
                text-transform: uppercase; color: rgba(244,243,239,0.5); margin: 0 0 6px; }
+  /* admin on phones: no horizontal overflow, scrollable tab row, map tabs stack */
+  @media (max-width: 760px) {
+    body { overflow-x: hidden; }
+    .topbar { padding: 0 10px; gap: 8px 12px; }
+    .topbar > * { min-width: 0; }
+    .wordmark { font-size: 17px; padding: 8px 0; }
+    .wordmark small { display: none; }
+    .crumb { font-size: 10px; overflow: hidden; white-space: nowrap; }
+    .crumb b { overflow: hidden; text-overflow: ellipsis; max-width: 40vw; display: inline-block; vertical-align: bottom; }
+    .statuschip { font-size: 8px; padding: 2px 8px; }
+    .tabs { margin-left: 0; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;
+            flex: none; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tabs button { padding: 10px 9px; font-size: 10px; letter-spacing: 0.08em; flex: none; }
+    .wrap { padding: 16px 12px; }
+    .grid3 { grid-template-columns: 1fr 1fr; }
+    .card { padding: 12px 12px; }
+    .row button { padding: 4px 7px; font-size: 12px; }
+    /* Map tab: map on top (draw with your thumb), controls scroll below */
+    #tab-map.flexon { flex-direction: column; }
+    #maparea { flex: none; height: 52vh; order: -1; border-bottom: 1px solid var(--line); }
+    #mapside { width: 100%; flex: 1; min-height: 0; border-right: 0; padding: 12px; }
+    #legend { top: 8px; right: 8px; padding: 7px 10px; min-width: 130px; font-size: 10px; }
+    .locatebtn { bottom: 12px; right: 8px; }
+    /* Logs tab: map on top, list below */
+    #tab-logs.flexon { flex-direction: column; }
+    #logmaparea { width: 100% !important; min-width: 0 !important; height: 40vh; flex: none;
+                  border-left: 0; border-bottom: 1px solid var(--line); order: -1; }
+    #tab-logs > div:first-child { flex: 1; min-height: 0; }
+  }
   .locatebtn { position: absolute; bottom: 18px; right: 12px; z-index: 1000;
                background: rgba(8,24,47,0.92); border: 1px solid var(--line); color: var(--paper);
                font-size: 12px; padding: 7px 12px; border-radius: 6px; }
@@ -319,6 +349,7 @@
                  oninput="renderLogRows()">
           <label class="muted" style="display:flex;align-items:center;gap:4px">
             <input type="checkbox" id="logAuto" checked style="width:auto"> auto-refresh</label>
+          <button onclick="clearLogs(this)" title="empty the log buffer for a fresh test run (stored GPS/laps unaffected)">clear</button>
         </div>
         <div id="logList" class="muted" style="font-family:'Geist Mono',monospace;font-size:11px">—</div>
       </div></div>
@@ -1033,6 +1064,12 @@ async function loadGpsSummary(btn) {
   }).join('') || 'No devices yet.';
 }
 let logEntries = [];
+async function clearLogs(btn) {
+  if (!confirm('Clear the ingest log? (Only this debug view — stored GPS points and laps are unaffected.)')) return;
+  await fetch('/api/admin/ingest-log/clear', { method: 'POST', headers: H() });
+  logEntries = [];
+  renderLogRows();
+}
 async function loadLogs() {
   if (!cur) return;
   try {
