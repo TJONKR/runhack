@@ -114,6 +114,25 @@ export async function ingestHandler(req, res) {
   const config = eventConfig({ zones: device.zones, config: device.event_config });
   const state = device.state && device.state.nextZone !== undefined ? device.state : createState();
   const { state: newState, events } = processFix(state, fix, config);
+
+  // Display-only "current runner" detection (never affects scoring): a
+  // device sustaining running pace while the currently-shown device is quiet
+  // or stationary becomes the one named on the board — so handoffs show up
+  // in seconds instead of after the first full lap. Walking never qualifies.
+  newState.runStreak = fix.speedMs != null && fix.speedMs >= 2 ? (state.runStreak || 0) + 1 : 0;
+  if (device.active_device_id !== device.id && newState.runStreak >= 3) {
+    const { rows: shown } = await pool.query('SELECT last_fix FROM devices WHERE id = $1', [
+      device.active_device_id,
+    ]);
+    const sf = shown[0]?.last_fix;
+    const shownQuiet = !sf?.at || Date.now() - sf.at > 45_000;
+    const shownStationary = sf?.speedMs != null && sf.speedMs < 1;
+    if (shownQuiet || shownStationary) {
+      await pool.query('UPDATE teams SET active_device_id = $1 WHERE id = $2', [device.id, device.team_id]);
+      device.active_device_id = device.id;
+      note('shown as current runner (sustained running)');
+    }
+  }
   for (const ev of events) {
     if (ev.type === 'dropped') note(`fix dropped: ${ev.reason}`);
     if (ev.type === 'zone_enter') note(`entered zone ${ev.zone}`);
