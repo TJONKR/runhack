@@ -94,6 +94,10 @@
   #legend .lstale { opacity: 0.4; }
   #legend h3 { font-family: 'Geist Mono', monospace; font-size: 9px; letter-spacing: 0.2em;
                text-transform: uppercase; color: rgba(244,243,239,0.5); margin: 0 0 6px; }
+  .locatebtn { position: absolute; bottom: 18px; right: 12px; z-index: 1000;
+               background: rgba(8,24,47,0.92); border: 1px solid var(--line); color: var(--paper);
+               font-size: 12px; padding: 7px 12px; border-radius: 6px; }
+  .locatebtn.on { border-color: var(--sky); color: var(--sky); }
   .vhandle { background: #fff; border: 2px solid var(--sky); border-radius: 2px; cursor: grab; }
   .mhandle { background: var(--gold); border: 2px solid var(--navy); border-radius: 50%; cursor: move; }
 
@@ -320,6 +324,7 @@
       </div></div>
       <div id="logmaparea" style="width:42%;min-width:320px;position:relative;border-left:1px solid var(--line)">
         <div id="logmap" style="position:absolute;inset:0"></div>
+        <button class="locatebtn" onclick="toggleLocate(logMap, this)">📍 My location</button>
       </div>
     </div>
 
@@ -361,6 +366,7 @@
       <div id="maparea">
         <div id="map"></div>
         <div id="legend" style="display:none"></div>
+        <button class="locatebtn" onclick="toggleLocate(map, this)">📍 My location</button>
       </div>
     </div>
 
@@ -921,6 +927,40 @@ function deleteDevice(id, label) {
 setInterval(() => {
   if (cur && curTab === 'runners' && !document.hidden) loadRoster();
 }, 5000);
+
+/* ---------- browser geolocation: you-are-here dot on the admin maps ---------- */
+const geo = { id: null, map: null, dot: null, ring: null, btn: null, centered: false };
+function stopLocate() {
+  if (geo.id != null) navigator.geolocation.clearWatch(geo.id);
+  if (geo.dot) geo.map.removeLayer(geo.dot);
+  if (geo.ring) geo.map.removeLayer(geo.ring);
+  if (geo.btn) { geo.btn.classList.remove('on'); geo.btn.textContent = '\ud83d\udccd My location'; }
+  Object.assign(geo, { id: null, map: null, dot: null, ring: null, btn: null, centered: false });
+}
+function toggleLocate(m, btn) {
+  if (!m) return;
+  if (geo.id != null) { const was = geo.map; stopLocate(); if (was === m) return; }
+  if (!navigator.geolocation) return alert('This browser has no geolocation.');
+  geo.map = m; geo.btn = btn;
+  btn.classList.add('on'); btn.textContent = '\u23f3 locating\u2026';
+  geo.id = navigator.geolocation.watchPosition(
+    (pos) => {
+      const ll = [pos.coords.latitude, pos.coords.longitude];
+      if (!geo.dot) {
+        geo.dot = L.circleMarker(ll, { radius: 7, color: '#fff', weight: 2, fillColor: '#3A90E6', fillOpacity: 1 })
+          .bindTooltip('you are here').addTo(m);
+        geo.ring = L.circle(ll, { radius: pos.coords.accuracy || 20, color: '#3A90E6', weight: 1, fillOpacity: 0.08 }).addTo(m);
+      } else {
+        geo.dot.setLatLng(ll);
+        geo.ring.setLatLng(ll).setRadius(pos.coords.accuracy || 20);
+      }
+      btn.textContent = '\ud83d\udccd following (\u00b1' + Math.round(pos.coords.accuracy || 0) + 'm) \u2014 tap to stop';
+      if (!geo.centered) { m.setView(ll, Math.max(m.getZoom(), 17)); geo.centered = true; }
+    },
+    (err) => { alert('Location unavailable: ' + err.message + '\n(Allow location for this site in the browser.)'); stopLocate(); },
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+  );
+}
 
 /* ---------- ingest log tab ---------- */
 let logMap = null, logPingLayer = null, logZoneLayer = null, logFocusMarker = null;
