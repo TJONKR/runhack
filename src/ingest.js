@@ -109,7 +109,12 @@ export async function ingestHandler(req, res) {
         device.active_device_id,
       ]);
       const lastAt = act[0]?.last_fix?.at;
-      takeOver = lastAt == null || Date.now() - lastAt > 90_000;
+      // Auto-takeover needs BOTH: the active tracker silent for 90s AND this
+      // device moving at running pace — so a standby phone carried around
+      // (toilet, shop) can't steal the slot from a runner who paused. When
+      // the payload has no speed, fail open (the active one is silent anyway).
+      const movingLikeARunner = fix.speedMs == null || fix.speedMs >= 1.5;
+      takeOver = (lastAt == null || Date.now() - lastAt > 90_000) && movingLikeARunner;
     }
     if (takeOver) {
       note('took over as active tracker');
