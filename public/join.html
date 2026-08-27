@@ -82,10 +82,10 @@
           when you complete the course circuit at running pace.</li>
       </ol>
       <p class="muted" style="margin-bottom:0">
-        <b>Handovers:</b> sharing one phone? Just pass it — nothing to tap. Using your own phones?
-        Each runner sets up tracking once, then tap <b>Make active</b> on your team page when you
-        head out. <b>Keep the tracking phone charged</b> — the board shows your battery so the
-        marshals will nag you.</p>
+        <b>Handovers:</b> nothing to tap, ever. Share one phone or use your own — whichever
+        phone completes a lap scores it (one lap per team at a time, enforced automatically).
+        <b>Keep your phone charged</b> — the board shows your battery so the marshals will nag
+        you.</p>
     </div>
   </div>
 
@@ -220,9 +220,8 @@ async function poll() {
     const s = await r.json();
     if (s.activated) {
       show('step-live');
-      document.getElementById('liveTitle').textContent = s.active
-        ? "You're live. Background Traccar, open your agent app, and run."
-        : 'Connected — on standby. This phone takes over if the active one goes quiet.';
+      document.getElementById('liveTitle').textContent =
+        "You're connected. Background Traccar, open your agent app, and run — laps count automatically.";
       document.getElementById('liveStats').textContent =
         `Laps on this device: ${s.laps}` + (s.lastFixAgoS != null ? ` · last ping ${s.lastFixAgoS}s ago` : '');
     }

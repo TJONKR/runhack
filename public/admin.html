@@ -605,9 +605,9 @@ function renderChecklist() {
       '(scan a team QR, connect Traccar, watch the Logs tab)') +
     item(pubOk, 'Publish to the landing page when ready', null, '(button above in Race)') +
     `<div class="muted" style="margin-top:8px;font-size:12px">
-      Day-of quick reference: handoff on a shared phone = just pass it. Separate phones = Make active
-      on the team page. Fix anything in Teams (laps, scores) or Runners (devices). Pause/End in Race
-      above. Watch pings live in Logs.</div>`;
+      Day-of quick reference: handoffs need nothing — any connected phone scores its laps
+      automatically (one lap per team at a time). Fix anything in Teams (laps, scores) or Runners
+      (devices). Pause/End in Race above. Watch pings live in Logs.</div>`;
 }
 async function saveEvent() {
   const body = {
@@ -861,7 +861,7 @@ async function loadRoster() {
       : d.lastPingAgoS <= 15 ? `<span style="color:var(--ok)">ping ${d.lastPingAgoS}s</span>`
       : `ping ${d.lastPingAgoS}s`;
     const label = d.member_name || d.name || 'Team device';
-    const state = d.is_active ? '<b style="color:var(--ok)">ACTIVE</b>' : d.activated_at ? 'standby' : 'not connected';
+    const state = d.is_active ? '<b style="color:var(--ok)">ON BOARD</b>' : d.activated_at ? 'connected' : 'never pinged';
     const batt = d.battery == null ? ''
       : ` · <span style="color:${d.battery <= 20 && !d.charging ? 'var(--orange)' : 'inherit'}">🔋${Math.round(d.battery)}%${d.charging ? '⚡' : ''}</span>`;
     const traccar = `org.traccar.client://config?url=${encodeURIComponent(location.origin + '/ingest/' + d.token)}&id=${d.token}&accuracy=high&interval=2&distance=10`;
@@ -870,7 +870,7 @@ async function loadRoster() {
       <button onclick="copyText('${traccar}', this)" title="copy the Traccar config link — open on the phone to (re)connect it">cfg</button>
       <button onclick="renameDevice(${d.id}, '${(d.name || '').replace(/'/g, "\\'")}')">rename</button>
       <button onclick="assignDevice(${d.id}, ${d.team_id})" title="link this device to a person (credits their laps)">assign</button>
-      ${d.is_active ? '' : `<button onclick="activateDevice(${d.id})" title="make this the team's scoring tracker">activate</button>`}
+      ${d.is_active ? '' : `<button onclick="activateDevice(${d.id})" title="laps always count from any phone — this sets whose name shows on the board">show on board</button>`}
       <button onclick="deviceAction(${d.id}, '/reset-state')" title="clear a stuck lap state machine">reset</button>
       <button onclick="deleteDevice(${d.id}, '${label.replace(/'/g, "\\'")}')">✕</button>
     </div></div>`;

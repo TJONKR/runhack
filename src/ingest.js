@@ -97,35 +97,18 @@ export async function ingestHandler(req, res) {
     note('first ping — device connected');
   }
 
-  // One scoring device per team. The first device to ping becomes active;
-  // a non-active device takes over only if the active one has gone silent
-  // (dead battery / closed app) — otherwise its pings are recorded for ops
-  // visibility but don't drive the lap engine.
+  // EVERY device's pings run the lap engine — laps are permissionless. The
+  // course itself is the gate: only a device that physically completes the
+  // zone sequence at valid pace can score, and the cross-device too_soon
+  // guard below limits the team to one counted lap per lap-window, so two
+  // phones running together can't double-count. "Active" is descriptive
+  // only (who shows on the board): the device that last scored a lap.
   const fixJson = { lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM, speedMs: fix.speedMs, at: fix.timestampMs, battery: fix.battery, charging: fix.charging };
-  if (device.active_device_id !== device.id) {
-    let takeOver = device.active_device_id == null;
-    if (!takeOver) {
-      const { rows: act } = await pool.query('SELECT last_fix FROM devices WHERE id = $1', [
-        device.active_device_id,
-      ]);
-      const lastAt = act[0]?.last_fix?.at;
-      // Auto-takeover needs BOTH: the active tracker silent for 90s AND this
-      // device moving at running pace — so a standby phone carried around
-      // (toilet, shop) can't steal the slot from a runner who paused. When
-      // the payload has no speed, fail open (the active one is silent anyway).
-      const movingLikeARunner = fix.speedMs == null || fix.speedMs >= 1.5;
-      takeOver = (lastAt == null || Date.now() - lastAt > 90_000) && movingLikeARunner;
-    }
-    if (takeOver) {
-      note('took over as active tracker');
-      await pool.query(
-        'UPDATE teams SET active_device_id = $1 WHERE id = $2 AND (active_device_id IS NULL OR active_device_id = $3 OR $4)',
-        [device.id, device.team_id, device.active_device_id, device.active_device_id == null]
-      );
-    } else {
-      await pool.query('UPDATE devices SET last_fix = $1 WHERE id = $2', [fixJson, device.id]);
-      return res.status(200).send('standby');
-    }
+  if (device.active_device_id == null) {
+    // first ping for the team: point the board display at this device
+    await pool.query('UPDATE teams SET active_device_id = $1 WHERE id = $2 AND active_device_id IS NULL', [
+      device.id, device.team_id,
+    ]);
   }
 
   const config = eventConfig({ zones: device.zones, config: device.event_config });
@@ -199,6 +182,10 @@ export async function ingestHandler(req, res) {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [device.event_id, device.team_id, device.member_id, device.id, ev.seconds, ev.counted, ev.reason, ev.entrySeconds]
       );
+      if (ev.counted && device.active_device_id !== device.id) {
+        await pool.query('UPDATE teams SET active_device_id = $1 WHERE id = $2', [device.id, device.team_id]);
+        note('now shown as the current runner');
+      }
     }
   }
   for (const ev of events) {

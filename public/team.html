@@ -171,13 +171,14 @@ async function tick() {
     document.getElementById('devices').innerHTML = (t.devices || []).map((d) => {
       const stale = d.lastPingAgoS == null || d.lastPingAgoS > 60;
       const cls = d.active && !stale ? 'active' : 'frozen';
-      let tag = d.active ? (stale ? 'active · signal lost' : `tracking · ping ${d.lastPingAgoS}s`)
-        : d.connected ? (stale ? 'standby · quiet' : 'standby') : 'never pinged';
+      let tag = d.active ? (stale ? 'on board · quiet' : `on board · ping ${d.lastPingAgoS}s`)
+        : d.connected ? (stale ? 'connected · quiet' : 'connected') : 'never pinged';
       if (d.battery != null) tag += ` · 🔋${Math.round(d.battery)}%${d.charging ? '⚡' : ''}`;
       const btn = d.active ? '' :
-        `<button onclick="makeActive(${d.id})" style="font-family:'Geist Mono',monospace;font-size:9px;
+        `<button onclick="makeActive(${d.id})" title="laps always count from any phone — this just sets whose name shows on the board"
+           style="font-family:'Geist Mono',monospace;font-size:9px;
            letter-spacing:0.12em;text-transform:uppercase;background:transparent;color:var(--gold);
-           border:1px solid rgba(240,190,42,0.5);border-radius:4px;padding:5px 10px;cursor:pointer">Make active</button>`;
+           border:1px solid rgba(240,190,42,0.5);border-radius:4px;padding:5px 10px;cursor:pointer">Show on board</button>`;
       return `<div class="member"><span class="dot ${cls}"></span>
         <span class="name" style="font-weight:400">${esc(d.label)}</span>
         <span class="tag">${d.laps} laps · ${tag}</span>${btn}</div>`;

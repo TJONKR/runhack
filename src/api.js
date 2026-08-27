@@ -239,8 +239,12 @@ router.get('/:slug/team/:teamId', async (req, res) => {
   });
 });
 
-// Public leaderboard. Poll every 2-5s.
+// Public leaderboard. Poll every 2-5s. A 2s in-memory cache makes board load
+// constant regardless of crowd size (clients poll at 3s; staleness invisible).
+const boardCache = new Map(); // slug -> { at, body }
 router.get('/:slug/board', async (req, res) => {
+  const cached = boardCache.get(req.params.slug);
+  if (!('fresh' in req.query) && cached && Date.now() - cached.at < 2000) return res.json(cached.body);
   const { rows } = await pool.query('SELECT * FROM events WHERE slug = $1', [req.params.slug]);
   const event = rows[0];
   if (!event) return res.status(404).json({ error: 'no such event' });
@@ -345,7 +349,7 @@ router.get('/:slug/board', async (req, res) => {
     delete t.kmThen;
   });
 
-  res.json({
+  const body = {
     event: event.name,
     slug: event.slug,
     lapM: config.lapM,
@@ -355,7 +359,9 @@ router.get('/:slug/board', async (req, res) => {
     endAt: event.end_at,
     serverNow: new Date().toISOString(),
     teams: board,
-  });
+  };
+  boardCache.set(req.params.slug, { at: Date.now(), body });
+  res.json(body);
 });
 
 export default router;
