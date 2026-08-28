@@ -322,6 +322,8 @@ router.get('/:slug/board', async (req, res) => {
     `SELECT t.id, t.name, t.repo_url, t.commit_count, t.commit_override, t.score_adjust,
             t.last_commit_msg, t.last_commit_author, t.last_commit_at, t.committers,
             t.devin_sessions, t.devin_messages,
+            (SELECT count(*)::int FROM members m WHERE m.team_id = t.id) AS runner_count,
+            l.best_s AS best_lap_s,
             COALESCE(dm.name, ad.name, CASE WHEN ad.id IS NULL THEN NULL ELSE 'Team device' END) AS runner_name,
             ad.last_fix AS runner_last_fix,
             ll.seconds AS last_lap_s, ll.counted AS last_lap_valid, ll.reject_reason AS last_lap_reason,
@@ -336,6 +338,7 @@ router.get('/:slug/board', async (req, res) => {
                 count(*) FILTER (WHERE counted) AS valid,
                 count(*) FILTER (WHERE NOT counted) AS invalid,
                 avg(seconds) FILTER (WHERE counted) AS avg_s,
+                min(seconds) FILTER (WHERE counted) AS best_s,
                 count(*) FILTER (WHERE counted AND finished_at < now() - interval '10 minutes') AS valid_then
            FROM laps WHERE event_id = $1 GROUP BY team_id
        ) l ON l.team_id = t.id
@@ -368,6 +371,13 @@ router.get('/:slug/board', async (req, res) => {
         laps,
         invalidLaps: Number(t.invalid_laps),
         km,
+        runners: Number(t.runner_count) || 0,
+        // Per-runner distance: keeps a 3-person team legible next to a 4.
+        kmPerRunner: t.runner_count > 0 ? +(km / Number(t.runner_count)).toFixed(2) : null,
+        lapsPerRunner: t.runner_count > 0 ? +(laps / Number(t.runner_count)).toFixed(1) : null,
+        bestLap: t.best_lap_s != null
+          ? { seconds: Math.round(t.best_lap_s), paceSPerKm: Math.round(t.best_lap_s / (paceDistM / 1000)) }
+          : null,
         commits,
         repo: t.repo_url || null,
         committers: t.committers ?? null,

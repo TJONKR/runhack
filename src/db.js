@@ -149,19 +149,25 @@ export function eventStatus(event, now = Date.now()) {
 }
 
 // Rank score. Formula lives in event config so it can change without code:
-//   scoreFormula: 'km_x_commits'      (default, the event's "built x ran")
+//   scoreFormula: 'km'                (default) distance run, nothing else
+//                 'km_x_commits'      the old "built x ran"
 //                 'km_x_sqrt_commits' (diminishing returns on commit spam)
 //                 'km_plus_commits'   (score = km + commits * commitWeight)
 // commitCap (optional) caps how many commits can score at all.
+//
+// Default is plain km: GitHub is no longer part of signup, so a commit-based
+// formula would score every team zero. What teams built is judged off-board.
 export function teamScore(km, commits, config) {
   const c = config.commitCap ? Math.min(commits, config.commitCap) : commits;
-  switch (config.scoreFormula ?? 'km_x_commits') {
+  switch (config.scoreFormula ?? 'km') {
     case 'km_plus_commits':
       return +(km + c * (config.commitWeight ?? 0.1)).toFixed(2);
     case 'km_x_sqrt_commits':
       return +(km * Math.sqrt(c)).toFixed(2);
-    default:
+    case 'km_x_commits':
       return +(km * c).toFixed(2);
+    default:
+      return +km.toFixed(2);
   }
 }
 
@@ -180,7 +186,7 @@ export function eventConfig(event) {
     entryFixes: c.entryFixes ?? 1,
     exitFixes: c.exitFixes ?? 2,
     maxAccuracyM: c.maxAccuracyM ?? 40,
-    scoreFormula: c.scoreFormula ?? 'km_x_commits',
+    scoreFormula: c.scoreFormula ?? 'km',
     commitWeight: c.commitWeight ?? 0.1,
     commitCap: c.commitCap ?? null,
     minTeamSize: c.minTeamSize ?? 3, // event rule: teams of 3/4

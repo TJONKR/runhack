@@ -116,8 +116,9 @@
   @media (prefers-reduced-motion: reduce) { .livepill { animation: none; } }
   td.team { font-weight: 700; }
   td.score { font-weight: 900; color: var(--sky); font-size: 26px; letter-spacing: -0.5px; }
-  td.km { color: var(--orange); font-weight: 700; }
-  td.laps, td.commits { font-variant-numeric: tabular-nums; }
+  td.perrunner { color: var(--orange); font-weight: 700; }
+  td.runners { color: rgba(244,243,239,0.6); }
+  td.laps, td.runners, td.perrunner { font-variant-numeric: tabular-nums; }
   .runner { color: rgba(244,243,239,0.65); font-size: 15px; }
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }
   .running { background: #4ade80; box-shadow: 0 0 8px #4ade80; } .stopped { background: var(--gold); } .idle { background: #333f52; }
@@ -161,9 +162,10 @@
     td.rank { width: 22px; }
     .runner { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
               display: inline-block; vertical-align: middle; }
+    th:nth-child(5), td:nth-child(5),
     th:nth-child(6), td:nth-child(6),
-    th:nth-child(8), td:nth-child(8),
-    th:nth-child(9), td:nth-child(9) { display: none; }
+    th:nth-child(7), td:nth-child(7),
+    th:nth-child(8), td:nth-child(8) { display: none; }
     td.score { font-size: 16px; }
     .runner { font-size: 12px; max-width: 56px; overflow: hidden; text-overflow: ellipsis;
               white-space: nowrap; display: inline-block; vertical-align: middle; }
@@ -210,7 +212,7 @@
 <main>
   <div class="vitals" id="vitals" style="display:none">
     <div class="vital km"><span>Distance run</span><b id="vKm">0.0<i>km</i></b></div>
-    <div class="vital commits"><span>Commits shipped</span><b id="vCommits">0</b></div>
+    <div class="vital commits"><span>Laps run</span><b id="vCommits">0</b></div>
     <div class="vital teams"><span>On track now</span><b id="vTeams">0<i id="vTeamsOf"></i></b></div>
   </div>
   <div id="state" style="display:none"></div>
@@ -218,8 +220,8 @@
     <table>
       <thead><tr>
         <th></th><th>Team</th><th>Runner</th>
-        <th class="num">Laps</th><th class="num">KM</th><th class="num">Commits</th>
-        <th class="num">Score</th><th class="num">Last lap</th><th class="num">Avg lap</th>
+        <th class="num">Laps</th><th class="num">Runners</th><th class="num">Per runner</th>
+        <th class="num">Best lap</th><th class="num">Avg lap</th><th class="num">KM</th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -247,7 +249,6 @@ function fmtAgo(s) {
   return `${Math.round(s / 3600)}h ago`;
 }
 
-const REASONS = { too_fast: 'GPS bounce', too_slow: 'too slow', outside_window: 'outside race', too_soon: 'double count' };
 
 async function tick() {
   try {
@@ -262,21 +263,18 @@ async function tick() {
     cta.style.display = board.status === 'finished' ? 'none' : '';
     document.getElementById('scoreRule').innerHTML =
       '<span class="ryb">You run. You build. </span>Score = ' +
-      (board.scoreFormula === 'km_plus_commits' ? 'km + weighted commits.' : 'km x commits.');
+      ({ km_plus_commits: 'km + weighted commits.', km_x_commits: 'km x commits.',
+         km_x_sqrt_commits: 'km x √commits.' }[board.scoreFormula] || 'distance run.');
     renderState();
     renderVitals();
     document.getElementById('rows').innerHTML = board.teams.map((t, i) => {
       const move = t.move
         ? `<span class="move ${t.move}">${t.move === 'up' ? '▲' : '▼'}</span>` : '';
-      const lap = t.lastLap;
-      const lapCell = lap
-        ? `<span class="${lap.valid ? 'lap-valid' : 'lap-invalid'}">${lap.seconds}s ${lap.valid ? '✓' : '✕'}</span>` +
-          (lap.valid
-            ? `<span class="lap-reason">${fmtPace(lap.paceSPerKm)}</span>`
-            : `<span class="lap-reason">${REASONS[lap.reason] || lap.reason || 'invalid'}</span>`)
-        : '—';
       const avgCell = t.avgLap
         ? `<span>${t.avgLap.seconds}s</span><span class="lap-reason">${fmtPace(t.avgLap.paceSPerKm)}</span>`
+        : '—';
+      const bestCell = t.bestLap
+        ? `<span class="lap-valid">${t.bestLap.seconds}s</span><span class="lap-reason">${fmtPace(t.bestLap.paceSPerKm)}</span>`
         : '—';
       const commit = t.lastCommit
         ? `<span class="commitline" title="${esc(t.lastCommit.author || '')}">↑ ${esc(t.lastCommit.message)} · ${fmtAgo(t.lastCommit.agoS)}</span>`
@@ -291,12 +289,16 @@ async function tick() {
         <td class="team">${esc(t.team)}${commit}</td>
         <td><span class="dot ${t.status}"></span><span class="runner">${t.runner ? esc(t.runner) : '—'}</span>${
           live ? '<span class="livepill">live</span>' : ''}</td>
-        <td class="num laps">${t.laps}</td>
-        <td class="num km">${t.km.toFixed(1)}</td>
-        <td class="num commits">${t.commits}</td>
-        <td class="num score">${t.score}</td>
-        <td class="num">${lapCell}</td>
+        <td class="num laps">${t.laps}${t.invalidLaps
+          ? `<span class="lap-reason">+${t.invalidLaps} void</span>` : ''}</td>
+        <td class="num runners">${t.runners || '—'}</td>
+        <td class="num perrunner">${t.kmPerRunner != null
+          ? `${t.kmPerRunner.toFixed(1)}<span class="lap-reason">${t.lapsPerRunner} lap${
+              t.lapsPerRunner === 1 ? '' : 's'} ea.</span>`
+          : '—'}</td>
+        <td class="num">${bestCell}</td>
         <td class="num">${avgCell}</td>
+        <td class="num score">${t.km.toFixed(1)}</td>
       </tr>`;
     }).join('');
   } catch {}
@@ -309,10 +311,10 @@ function renderVitals() {
   if (!board || !board.teams.length) { el.style.display = 'none'; return; }
   el.style.display = '';
   const km = board.teams.reduce((s, t) => s + t.km, 0);
-  const commits = board.teams.reduce((s, t) => s + t.commits, 0);
+  const laps = board.teams.reduce((s, t) => s + t.laps, 0);
   const running = board.teams.filter((t) => t.status === 'running').length;
   document.getElementById('vKm').innerHTML = `${km.toFixed(1)}<i>km</i>`;
-  document.getElementById('vCommits').textContent = commits;
+  document.getElementById('vCommits').textContent = laps;
   document.getElementById('vTeams').innerHTML = `${running}<i>/${board.teams.length} teams</i>`;
 }
 

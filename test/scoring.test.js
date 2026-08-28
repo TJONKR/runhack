@@ -3,9 +3,15 @@ import assert from 'node:assert/strict';
 import { teamScore, eventStatus } from '../src/db.js';
 import { parseRepo } from '../src/github.js';
 
-test('default score is km x commits', () => {
-  assert.equal(teamScore(4.8, 25, {}), 120);
-  assert.equal(teamScore(4.8, 0, {}), 0);
+test('default score is distance run — commits are ignored', () => {
+  assert.equal(teamScore(4.8, 25, {}), 4.8);
+  assert.equal(teamScore(4.8, 0, {}), 4.8); // no repo must not mean no score
+  assert.equal(teamScore(0, 99, {}), 0);
+});
+
+test('the commit formulas still work when an event opts into one', () => {
+  assert.equal(teamScore(4.8, 25, { scoreFormula: 'km_x_commits' }), 120);
+  assert.equal(teamScore(4.8, 0, { scoreFormula: 'km_x_commits' }), 0);
 });
 
 test('sum formula uses commit weight', () => {
@@ -33,7 +39,7 @@ test('event status from window', () => {
 
 test('teamScore formula variants and commit cap', () => {
   assert.equal(teamScore(10, 25, { scoreFormula: 'km_x_sqrt_commits' }), 50); // 10 * sqrt(25)
-  assert.equal(teamScore(10, 100, { commitCap: 40 }), 400); // capped at 40
+  assert.equal(teamScore(10, 100, { scoreFormula: 'km_x_commits', commitCap: 40 }), 400); // capped at 40
   assert.equal(teamScore(10, 100, { scoreFormula: 'km_x_sqrt_commits', commitCap: 25 }), 50);
   assert.equal(teamScore(10, 30, { scoreFormula: 'km_plus_commits', commitWeight: 0.5, commitCap: 20 }), 20);
 });

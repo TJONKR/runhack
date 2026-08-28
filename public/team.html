@@ -107,7 +107,7 @@
       <div class="stat score"><b id="score">0</b><span>score</span></div>
       <div class="stat"><b id="laps">0</b><span>laps</span><span class="sub" id="invalids"></span></div>
       <div class="stat"><b id="km">0.0</b><span>km</span></div>
-      <div class="stat"><b id="commits">0</b><span>commits</span><span class="sub" id="committers"></span></div>
+      <div class="stat"><b id="runners">0</b><span>runners</span><span class="sub" id="perRunner"></span></div>
       <div class="stat devin" id="devinStat" style="display:none"><b id="devinMsgs">0</b><span>devin prompts</span><span class="sub" id="devinSessions"></span></div>
       <div class="stat best"><b id="bestlap">—</b><span>best lap</span><span class="sub" id="bestpace"></span></div>
       <div class="stat"><b id="avglap">—</b><span>avg lap</span><span class="sub" id="avgpace"></span></div>
@@ -162,9 +162,11 @@ async function tick() {
     }
     const pace = (s) => s == null ? '' : `${Math.floor(s / 60)}'${String(Math.round(s % 60)).padStart(2, '0')}"/km`;
     laps.textContent = t.laps; km.textContent = t.km.toFixed(1);
-    commits.textContent = t.commits; score.textContent = t.score;
+    score.textContent = t.score;
+    runners.textContent = t.members.length;
+    perRunner.textContent = t.members.length
+      ? `${(t.km / t.members.length).toFixed(1)} km each` : '';
     invalids.textContent = t.invalidLaps ? `+${t.invalidLaps} invalid` : '';
-    committers.textContent = t.committers ? `${t.committers} committing` : '';
     // Opt-in bragging stat; hidden entirely for teams that didn't register a Devin email.
     const dv = document.getElementById('devinStat');
     if (t.devin) {
