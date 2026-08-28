@@ -50,7 +50,20 @@ function num(v) {
   return isNaN(n) ? null : n;
 }
 
-// Cheap in-memory rate limit: max ~2 fixes/sec sustained per userId.
+// Per-device ceiling on fixes. This exists to stop a runaway client melting
+// the box, NOT to shape normal traffic — Traccar at interval=2s sends about
+// 5 fixes per 10s, well under any of these numbers.
+//
+// The old ceiling of 20/10s quietly ate laps. Traccar BUFFERS while it has no
+// signal and flushes the backlog on reconnect, so a five-minute GPS hole in a
+// park (trees, an underpass, a dead spot behind a stand) returns as ~150
+// fixes at once. Everything past the 20th was 429'd and thrown away, and the
+// laps inside that gap simply never existed. Losing a lap to a dropped
+// connection is exactly the failure a runner would never forgive.
+//
+// 300 per 10s still fences off a broken client while letting a ~10 minute
+// backlog land intact.
+const INGEST_BURST = Number(process.env.INGEST_BURST) || 300;
 const buckets = new Map();
 function rateLimited(userId) {
   const now = Date.now();
@@ -59,8 +72,12 @@ function rateLimited(userId) {
     b = { start: now, count: 0 };
     buckets.set(userId, b);
   }
+  // Devices come and go across a long event; don't grow the map forever.
+  if (buckets.size > 5000) {
+    for (const [k, v] of buckets) if (now - v.start > 10_000) buckets.delete(k);
+  }
   b.count += 1;
-  return b.count > 20;
+  return b.count > INGEST_BURST;
 }
 
 export async function ingestHandler(req, res) {
