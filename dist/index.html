@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RUN/HACK · The Running Hackathon · London · Aug 29, 2026</title>
+    <meta name="description" content="London's first running hackathon, built for the crazy ones. Teams of 3 to 4 ship a real AI product in one day, and only the teammate out running can build. August 29, 2026." />
+    <meta name="theme-color" content="#F4F3EF" />
+    <meta property="og:title" content="RUN/HACK · The Running Hackathon" />
+    <meta property="og:description" content="You run. You build. London's first hackathon where you can only build while you run. Aug 29, 2026." />
+    <meta property="og:type" content="website" />
+    <!-- Several scrapers (X included) will not resolve a relative og:image.
+         Swap these to the absolute https:// URL once the domain is live. -->
+    <meta property="og:image" content="./assets/img/og.jpg" />
+    <meta property="og:image:width" content="1667" />
+    <meta property="og:image:height" content="943" />
+    <meta property="og:image:alt" content="Two sprinters at full stride down a sunlit running track, under the giant RUN/HACK lockup" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="RUN/HACK · The Running Hackathon" />
+    <meta name="twitter:description" content="You run. You build. London's first hackathon where you can only build while you run. Aug 29, 2026." />
+    <meta name="twitter:image" content="./assets/img/og.jpg" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="./favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="./favicon-16.png" type="image/png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="./favicon-180.png" />
+    <link rel="preload" as="image" href="./assets/img/newhero2-bg.webp" fetchpriority="high" />
+    <script type="module" crossorigin src="./assets/index-BNpq_hDL.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-D0hBo9Wm.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#register">Skip to registration</a>
+
+    <!-- Fixed chrome lives OUTSIDE #smooth-wrapper: a transformed ancestor breaks position:fixed -->
+    <div id="preloader" class="preloader" aria-hidden="true">
+      <div class="preloader__inner">
+        <span class="preloader__mark display">Run<i>/</i>Hack</span>
+        <span class="preloader__word mono" data-preloader-word>On your marks</span>
+        <div class="preloader__track"><div class="preloader__bar" data-preloader-bar></div></div>
+        <span class="preloader__pct mono" data-preloader-pct>000</span>
+      </div>
+    </div>
+
+    <header class="site-head" data-site-head>
+      <a class="lockup" href="#top" data-cursor="link" aria-label="RUN/HACK, home">
+        <span class="lockup__word display">Run<i class="lockup__slash">/</i>Hack</span>
+        <span class="lockup__rule" aria-hidden="true"></span>
+        <span class="lockup__sub mono">London · N°01</span>
+      </a>
+      <div class="site-head__actions">
+        <a class="btn-ghost" data-cursor="link" data-sponsor-cta>
+          <span class="btn-ghost__full">Join as a sponsor</span>
+          <span class="btn-ghost__short" aria-hidden="true">Sponsor</span>
+        </a>
+        <a class="btn" href="#register" data-luma data-cursor="link">Register</a>
+      </div>
+    </header>
+
+    <!-- Marathon rail: the scrollbar, expressed as race distance -->
+    <aside class="rail" data-rail aria-hidden="true">
+      <div class="rail__track">
+        <div class="rail__fill" data-rail-fill></div>
+        <span class="rail__tick" style="--at: 23.7%"><i></i><b class="mono">10K</b></span>
+        <span class="rail__tick" style="--at: 50%"><i></i><b class="mono">21.1</b></span>
+        <span class="rail__tick" style="--at: 71.1%"><i></i><b class="mono">30K</b></span>
+        <span class="rail__tick rail__tick--end" style="--at: 100%"><i></i><b class="mono">42.2</b></span>
+        <!-- marker lives INSIDE the track so its offset is measured from the
+             track's own top, not the rail's -->
+        <div class="rail__marker" data-rail-marker>
+          <span class="rail__value mono" data-rail-value>0.00</span>
+          <span class="rail__unit mono">km</span>
+        </div>
+      </div>
+    </aside>
+
+    <div id="cursor" class="cursor" aria-hidden="true">
+      <div class="cursor__ring" data-cursor-ring><span class="cursor__label mono" data-cursor-label></span></div>
+      <div class="cursor__dot" data-cursor-dot></div>
+    </div>
+
+    <div id="smooth-wrapper">
+      <div id="smooth-content">
+        <main id="top">
+          <!-- ═══════════ S1 · HERO ═══════════ -->
+          <section id="hero" class="hero" data-scene="hero">
+            <!-- One layer. This artwork already has the runners composited in
+                 front of the RUN/HACK lockup, so the knocked-out figure layer
+                 the previous hero needed would only redraw them on top of
+                 themselves, soft matte edges and all. The type is baked in too,
+                 so there is no HTML type layer either. -->
+            <img class="hero__bg" src="./assets/img/newhero2-bg.webp" alt="Two sprinters at full stride down a sunlit running track, under the giant RUN/HACK lockup" data-hero-bg fetchpriority="high" />
+
+            <!-- computer vision: detections locked to the new runner -->
+            <div class="cv cv--hero" aria-hidden="true">
+              <span class="cv__box cv__box--b" style="--t:24.7%;--l:3.7%;--w:35.0%;--h:57.1%">
+                <span class="cv__label">runner_01<i class="cv__conf">0.99</i></span>
+              </span>
+              <span class="cv__box" style="--t:19.8%;--l:41.3%;--w:29.5%;--h:54.1%">
+                <span class="cv__label">runner_02<i class="cv__conf">0.97</i></span>
+              </span>
+              <span class="cv__box cv__box--c" style="--t:70.3%;--l:3.8%;--w:8.6%;--h:11.3%">
+                <span class="cv__label">shoe<i class="cv__conf">0.96</i></span>
+              </span>
+              <span class="cv__box cv__box--c" style="--t:70.3%;--l:24.6%;--w:6.4%;--h:9.9%">
+                <span class="cv__label">shoe<i class="cv__conf">0.93</i></span>
+              </span>
+              <span class="cv__box cv__box--c" style="--t:63.1%;--l:64.8%;--w:4.3%;--h:10.7%">
+                <span class="cv__label">shoe<i class="cv__conf">0.91</i></span>
+              </span>
+            </div>
+
+            <!-- editorial furniture -->
+            <div class="hero__deco" aria-hidden="true">
+              <span class="crop crop--tl"></span>
+              <span class="crop crop--tr"></span>
+              <span class="crop crop--bl"></span>
+              <span class="crop crop--br"></span>
+            </div>
+
+            <div class="hero__overlay grid">
+              <h1 class="hero__h1">
+                <span class="hero__title head" data-hero-el>Running<br />Hackathon</span>
+              </h1>
+
+              <p class="hero__note" data-hero-el>
+                For the crazy ones. The ones who read “you can only build while
+                you run” and think obviously. One rule, all day, good vibes only.
+              </p>
+
+              <p class="hero__date mono" data-hero-el>Sat · 29 Aug 2026 · London</p>
+
+              <dl class="hero__reg mono" data-hero-el aria-hidden="true">
+                <div><dt>lat</dt><dd>51.5074° N</dd></div>
+                <div><dt>lon</dt><dd>0.1278° W</dd></div>
+                <div><dt>loop</dt><dd>1.00 km</dd></div>
+                <div><dt>gun</dt><dd>09:00</dd></div>
+              </dl>
+
+              <p class="hero__sub wide" data-hero-el>and build at the same time</p>
+
+              <p class="hero__keep display" data-hero-el aria-hidden="true">Nobody<br />sits down</p>
+
+              <div class="hero__series" data-hero-el aria-hidden="true">
+                <span class="hero__series-no display">N°01</span>
+                <span class="hero__series-name mono">London series</span>
+                <span class="hero__series-strap mono">One day / one loop / one step ahead</span>
+              </div>
+            </div>
+
+            <!-- partner carousel, pinned to the hero's bottom edge -->
+            <div class="partners" data-partners>
+              <div class="partners__track" data-partners-track></div>
+            </div>
+          </section>
+
+          <!-- ═══════════ S2 · THE RULE ═══════════ -->
+          <section id="rule" class="section section--paper" data-scene="rule" aria-labelledby="rule-title">
+            <div class="grid">
+              <p class="section__label mono" data-reveal>The rule</p>
+              <h2 id="rule-title" class="section__title head" data-reveal>
+                You run.<br /><em>You build.</em>
+              </h2>
+              <p class="section__lede lede" data-reveal>
+                Teams of three or four ship a real AI product in a single day, and only
+                the teammate out on the loop can touch it. Voice in from a phone, cloud
+                agents doing the work, output live on the screens at home base.
+                Loud music, sore legs, and something real by sundown.
+              </p>
+
+              <ul class="cards" data-cards>
+                <li class="card" data-card data-cursor="card">
+                  <div class="card__3d">
+                  <div class="card__frame">
+                    <div class="card__media">
+                      <video muted playsinline loop preload="none" poster="./assets/video/poster-run.webp" data-loop-video data-src="/assets/video/loop-run.mp4" aria-hidden="true"></video>
+                    </div>
+                  </div>
+                  <div class="card__body">
+                      <span class="card__no mono">01</span>
+                      <h3 class="card__title head">While you run</h3>
+                      <p class="card__copy">Only you can build. Hands free from a phone. Voice in, agents out.</p>
+                    </div></div>
+                </li>
+                <li class="card" data-card data-cursor="card">
+                  <div class="card__3d">
+                  <div class="card__frame">
+                    <div class="card__media">
+                      <video muted playsinline loop preload="none" poster="./assets/video/poster-stop.webp" data-loop-video data-src="/assets/video/loop-stop.mp4" aria-hidden="true"></video>
+                    </div>
+                  </div>
+                  <div class="card__body">
+                      <span class="card__no mono">02</span>
+                      <h3 class="card__title head">When you stop</h3>
+                      <p class="card__copy">The agents pause. Nothing moves until the next runner is out there.</p>
+                    </div></div>
+                </li>
+                <li class="card" data-card data-cursor="card">
+                  <div class="card__3d">
+                  <div class="card__frame">
+                    <div class="card__media">
+                      <video muted playsinline loop preload="none" poster="./assets/video/poster-win.webp" data-loop-video data-src="/assets/video/loop-win.mp4" aria-hidden="true"></video>
+                    </div>
+                  </div>
+                  <div class="card__body">
+                      <span class="card__no mono">03</span>
+                      <h3 class="card__title head">How you win</h3>
+                      <p class="card__copy">What you built × how far you ran. Neither one alone is enough.</p>
+                    </div></div>
+                </li>
+              </ul>
+
+              <dl class="stats" data-reveal>
+                <div class="stat"><dd class="stat__v display" data-count="100">100</dd><dt class="stat__k mono">crazy ones</dt></div>
+                <div class="stat"><dd class="stat__v display" data-count="8">8</dd><dt class="stat__k mono">hour race</dt></div>
+                <div class="stat"><dd class="stat__v display">3/4</dd><dt class="stat__k mono">per team</dt></div>
+                <div class="stat"><dd class="stat__v display" data-count="1">1</dd><dt class="stat__k mono">day, one loop</dt></div>
+              </dl>
+
+              <p class="section__fine mono" data-reveal>Pace rule: slower than 7'00"/km isn’t running. Walking counts as stopping.</p>
+            </div>
+          </section>
+
+          <!-- ═══════════ S3 · THE DAY ═══════════ -->
+          <section id="day" class="section section--ink" data-scene="day" aria-labelledby="day-title">
+            <div class="grid">
+              <p class="section__label mono" data-reveal>The day</p>
+              <h2 id="day-title" class="section__title head" data-reveal>One day.<br />One loop.</h2>
+
+              <ol class="steps" data-steps>
+                <span class="steps__spine" aria-hidden="true"><i data-steps-spine></i></span>
+                <li class="step" data-reveal>
+                  <span class="step__time mono">08:30</span>
+                  <span class="step__node" aria-hidden="true"></span>
+                  <span class="step__body">
+                    <span class="step__h">Doors</span>
+                    <span class="step__t">Show up with trainers and a laptop.</span>
+                  </span>
+                  <span class="step__n mono">01</span>
+                </li>
+                <li class="step" data-reveal>
+                  <span class="step__time mono">09:00</span>
+                  <span class="step__node" aria-hidden="true"></span>
+                  <span class="step__body">
+                    <span class="step__h">Teams</span>
+                    <span class="step__t">Find your people. Builders and runners, three or four deep.</span>
+                  </span>
+                  <span class="step__n mono">02</span>
+                </li>
+                <li class="step" data-reveal>
+                  <span class="step__time mono">10:00</span>
+                  <span class="step__node" aria-hidden="true"></span>
+                  <span class="step__body">
+                    <span class="step__h">Wire up</span>
+                    <span class="step__t">One hour to connect cloud agents to every phone.</span>
+                  </span>
+                  <span class="step__n mono">03</span>
+                </li>
+                <li class="step" data-reveal>
+                  <span class="step__time mono">11:00</span>
+                  <span class="step__node" aria-hidden="true"></span>
+                  <span class="step__body">
+                    <span class="step__h">The race</span>
+                    <span class="step__t">Only the runner builds, live on the big screens.</span>
+                  </span>
+                  <span class="step__n mono">04</span>
+                </li>
+                <li class="step" data-reveal>
+                  <span class="step__time mono">19:00</span>
+                  <span class="step__node" aria-hidden="true"></span>
+                  <span class="step__body">
+                    <span class="step__h">Ceremony</span>
+                    <span class="step__t">Demos, judging, prizes. Two scores decide it.</span>
+                  </span>
+                  <span class="step__n mono">05</span>
+                </li>
+              </ol>
+
+              <figure class="shot" data-reveal>
+                <div class="shot__frame">
+                  <!-- The campaign poster. It arrives already graded and
+                       already carrying its own type, so it gets neither the
+                       film treatment nor a detection overlay: both existed to
+                       bring the old concept frame into this language. -->
+                  <img src="./assets/img/poster-luma.webp" alt="RUN/HACK campaign poster: a runner at full stride along the Thames at sunrise, phone in hand, under the RUN/HACK lockup" loading="lazy" width="2000" height="2000" />
+                </div>
+                <figcaption class="mono">Campaign poster · London N°01</figcaption>
+              </figure>
+
+              <div class="editions" data-reveal>
+                <div class="edition edition--live" data-cursor="card">
+                  <span class="edition__no display">01</span>
+                  <span class="edition__city head">London</span>
+                  <span class="edition__meta mono">Sat 29 Aug 2026</span>
+                </div>
+                <div class="edition edition--soon" data-cursor="card">
+                  <span class="edition__no display">02</span>
+                  <span class="edition__city head">San&nbsp;Francisco</span>
+                  <span class="edition__meta mono">Soon</span>
+                </div>
+              </div>
+
+              <div id="register" class="register" data-reveal>
+                <p class="register__note mono" data-register-note>Applications opening soon</p>
+                <div class="register__actions">
+                  <a class="cta" data-register-cta data-cursor="cta">
+                    <span class="cta__t display">Register</span>
+                    <span class="cta__a" aria-hidden="true">→</span>
+                  </a>
+                  <a class="cta-ghost" data-cursor="link" data-sponsor-cta>
+                    <span class="cta-ghost__t">Join as a sponsor</span>
+                    <span class="cta-ghost__a" aria-hidden="true">→</span>
+                  </a>
+                </div>
+                <p class="register__sub">100 places. The rule is the filter. Only the crazy ones apply.</p>
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <!-- ═══════════ S4 · FOOTER ═══════════ -->
+        <footer id="footer" class="footer">
+          <img class="footer__bg" src="./assets/img/footer-bg.webp" alt="" aria-hidden="true" loading="lazy" data-footer-bg />
+          <div class="footer__veil" aria-hidden="true"></div>
+          <div class="grid">
+            <section class="countdown" aria-label="Countdown to the starting gun" data-countdown>
+              <div class="countdown__head">
+                <span class="countdown__dot" aria-hidden="true"></span>
+                <p class="countdown__label mono">Starting gun</p>
+                <span class="countdown__rule" aria-hidden="true"></span>
+                <p class="countdown__when mono">Sat 29 Aug 2026 · 09:00</p>
+              </div>
+
+              <div class="countdown__board">
+                <div class="cd"><span class="cd__v" data-count-days>--</span><span class="cd__k mono">days</span></div>
+                <div class="cd"><span class="cd__v" data-count-hours>--</span><span class="cd__k mono">hrs</span></div>
+                <div class="cd"><span class="cd__v" data-count-mins>--</span><span class="cd__k mono">min</span></div>
+                <div class="cd cd--live"><span class="cd__v" data-count-secs>--</span><span class="cd__k mono">sec</span></div>
+              </div>
+            </section>
+
+            <p class="footer__credit">
+              Made on the move by<br />
+              <strong>Zizou, Siena, Tijs, Luke, Rachel &amp; Aru</strong>
+            </p>
+            <p class="footer__meta mono">The Running Hackathon<br />London · 29 Aug 2026</p>
+
+            <nav class="footer__links" aria-label="Elsewhere">
+              <a class="footer__link" data-cursor="link" data-contact-cta>Contact us</a>
+              <a class="footer__link" data-cursor="link" data-linkedin hidden>LinkedIn</a>
+            </nav>
+          </div>
+
+          <div class="footer__mark display" aria-hidden="true" data-footer-mark>Run<i>/</i>Hack</div>
+        </footer>
+      </div>
+    </div>
+
+  </body>
+</html>

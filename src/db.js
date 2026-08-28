@@ -64,7 +64,6 @@ export async function initDb() {
       received_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS points_member_time ON points (member_id, fixed_at);
-    CREATE INDEX IF NOT EXISTS points_device_time ON points (device_id, fixed_at);
 
     CREATE TABLE IF NOT EXISTS devices (
       id          serial PRIMARY KEY,
@@ -104,6 +103,8 @@ export async function initDb() {
     ALTER TABLE members ALTER COLUMN user_id DROP NOT NULL;
     ALTER TABLE points ALTER COLUMN member_id DROP NOT NULL;
     ALTER TABLE points ADD COLUMN IF NOT EXISTS device_id integer;
+    -- after the ALTERs: on a fresh db device_id only exists from this point
+    CREATE INDEX IF NOT EXISTS points_device_time ON points (device_id, fixed_at);
   `);
 
   // One-time migration from the old per-stint model: members that carried a
@@ -177,6 +178,7 @@ export function eventConfig(event) {
     commitWeight: c.commitWeight ?? 0.1,
     commitCap: c.commitCap ?? null,
     minTeamSize: c.minTeamSize ?? 3, // event rule: teams of 3/4
+    maxTeamSize: c.maxTeamSize ?? 4,
     gate: c.gate ?? null, // [[lat,lng],[lat,lng]] timing line inside the start box
     // Which timing scores laps: 'exit_entry' (box timing, window over the
     // timed segment), 'gate' or 'entry_entry' (full lap, window over lapM).

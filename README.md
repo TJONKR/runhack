@@ -14,7 +14,9 @@ so event-week deploys carry zero risk to the app.
 People and devices are separate things:
 
 1. Each runner scans the **team QR** → `/{event}/join?team=N` → registers
-   **once** (a member).
+   **once** (a member). No QR needed: `/{event}/join` lets anyone pick a
+   team with space **or start a new team** (public, rate-limited; closed
+   once the race is finished). Teams cap at 4 runners (`maxTeamSize`).
 2. Any phone that will track gets registered as a **device** — linked to a
    person (credits their laps) or to the team (shared phone). The server
    mints an unguessable token and deep-links into
@@ -72,6 +74,7 @@ GitHub's 60 req/hr IP limit breaks at even a handful of teams. The admin
 
 | URL | What |
 | --- | --- |
+| `/` | THE event: redirects to the published event's board (live > upcoming); event list only as fallback |
 | `/admin` | race control (password = `ADMIN_KEY` env var) |
 | `/{event}/join?team=N` | runner signup (what team QRs encode) |
 | `/{event}/team/N` | public team page: join QR, readiness checklist, live roster |

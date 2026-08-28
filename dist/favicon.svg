@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>RUN/HACK</title>
+  <!-- corners are cut, never rounded: the shape signature of the site -->
+  <path d="M12 0 H64 V52 L52 64 H0 V12 Z" fill="#1311d1"/>
+  <g transform="translate(4.39 49.00) scale(0.04789 -0.04789)">
+    <path d="M62 0V710H401Q481 710 540.5 684.0Q600 658 632.5 611.0Q665 564 665 500Q665 450 646.0 411.5Q627 373 591.0 348.0Q555 323 504 314L502 324Q577 324 614.0 292.5Q651 261 655 200L671 0H471L461 166Q459 205 440.0 223.5Q421 242 373 242H258V0ZM258 399H365Q414 399 439.5 419.5Q465 440 465 477Q465 515 439.5 534.0Q414 553 365 553H258Z" fill="#f4f3ef"/>
+  </g>
+  <g transform="translate(38.61 52.84) scale(0.03488 -0.03488)">
+    <path d="M26 -110 323 750H517L220 -110Z" fill="#dd6a24"/>
+  </g>
+</svg>

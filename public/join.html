@@ -35,6 +35,14 @@
   button:hover { background: #ffd34d; }
   button.secondary { background: transparent; border: 1px solid var(--line); color: rgba(244,243,239,0.7);
                      font-weight: 400; font-size: 13px; padding: 10px; }
+  .modes { display: flex; gap: 8px; margin-bottom: 20px; }
+  .modes button { margin-top: 0; padding: 11px; font-size: 13px; font-weight: 700; border-radius: 6px;
+                  border: 1px solid var(--line); background: var(--navy2); color: rgba(244,243,239,0.6); }
+  .modes button:hover { background: var(--navy2); color: var(--paper); }
+  .modes button.active { border-color: var(--gold); color: var(--gold); background: rgba(240,190,42,0.08); }
+  a.teamlink { display: block; text-align: center; margin-top: 18px; color: var(--sky);
+               font-weight: 700; text-decoration: none; }
+  a.teamlink:hover { text-decoration: underline; }
   .step { display: none; }
   .step.active { display: block; }
   .status { text-align: center; padding: 28px 0 8px; font-size: 17px; font-weight: 700; }
@@ -58,15 +66,25 @@
   <h1 id="eventName">RUN/HACK</h1>
 
   <div class="step active" id="step-register">
-    <label>Team</label>
-    <select id="team"></select>
+    <div class="modes">
+      <button id="mode-join" class="active" onclick="setMode('join')">Join a team</button>
+      <button id="mode-create" onclick="setMode('create')">Start a new team</button>
+    </div>
+    <div id="joinFields">
+      <label>Team</label>
+      <select id="team"></select>
+    </div>
+    <div id="createFields" style="display:none">
+      <label>Team name</label>
+      <input id="teamName" placeholder="e.g. Prompt Pacers" autocomplete="off" maxlength="40">
+    </div>
     <label>Your name</label>
     <input id="name" placeholder="runner name" autocomplete="off">
     <div id="repoWrap" style="display:none">
       <label>Team GitHub repo (public — commits count toward your score)</label>
       <input id="repo" placeholder="https://github.com/you/project" autocomplete="off" inputmode="url">
     </div>
-    <button onclick="register()">Join the team →</button>
+    <button id="goBtn" onclick="register()">Join the team →</button>
     <button class="secondary" onclick="openDeviceStep()">Already joined? Set up tracking on this phone</button>
     <p class="muted">Register once. Tracking is per phone — set it up next, and pass the phone (or
       switch devices) at handovers.</p>
@@ -96,6 +114,7 @@
     <button onclick="connectDevice()">Connect Traccar →</button>
     <p class="muted">One phone can serve the whole team — laps count for the team either way;
       picking a runner just credits them on the roster.</p>
+    <a class="teamlink" id="teamLinkDevice" href="#">Your team page (QR for teammates) →</a>
   </div>
 
   <div class="step" id="step-traccar">
@@ -119,6 +138,8 @@
   <div class="step" id="step-live">
     <div class="status"><div class="ok">✓</div><span id="liveTitle">You're live. Background Traccar, open your agent app, and run.</span></div>
     <div class="status" id="liveStats" style="font-size:14px;font-weight:400;color:rgba(244,243,239,0.6)"></div>
+    <a class="teamlink" id="teamLinkLive" href="#">View your team page →</a>
+    <a class="teamlink" id="boardLink" href="#" style="color:rgba(244,243,239,0.55);font-weight:400">Leaderboard →</a>
   </div>
 </main>
 <footer id="sponsor-bar"></footer>
@@ -128,9 +149,33 @@
 const slug = location.pathname.split('/')[1];
 let token = null;          // this phone's device token
 let newMemberId = null;    // person just registered on this phone
+let joinedTeamId = null;   // team joined/created on this phone
+let info = null;
+let mode = 'join';
 
-const teamId = () => +document.getElementById('team').value;
+// The team the rest of the flow (device setup, team links) refers to:
+// whichever team was just joined/created, else the one picked in the select.
+const teamId = () => joinedTeamId ?? +document.getElementById('team').value;
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-join').classList.toggle('active', m === 'join');
+  document.getElementById('mode-create').classList.toggle('active', m === 'create');
+  document.getElementById('joinFields').style.display = m === 'join' ? '' : 'none';
+  document.getElementById('createFields').style.display = m === 'create' ? '' : 'none';
+  document.getElementById('goBtn').textContent = m === 'create' ? 'Create team & join →' : 'Join the team →';
+  updateRepoField();
+}
+
+// New team: the creator is its first runner, so the repo field always shows.
+// Existing team: only if nobody has set the repo yet.
+function updateRepoField() {
+  if (!info) return;
+  const team = info.teams.find((t) => String(t.id) === document.getElementById('team').value);
+  const show = mode === 'create' || (team && !team.has_repo);
+  document.getElementById('repoWrap').style.display = show ? 'block' : 'none';
+}
 
 async function init() {
   let r;
@@ -141,42 +186,69 @@ async function init() {
     return;
   }
   if (!r.ok) { document.getElementById('eventName').textContent = 'Unknown event'; document.getElementById('step-register').style.display = 'none'; return; }
-  const info = await r.json();
+  info = await r.json();
   document.getElementById('eventName').textContent = info.name;
+  if (info.status === 'finished') {
+    document.getElementById('step-register').innerHTML =
+      `<div class="status">This race has finished.</div>
+       <a class="teamlink" href="/${slug}/board">See the final board →</a>`;
+    return;
+  }
   const params = new URLSearchParams(location.search);
   const preTeam = params.get('team');
   const sel = document.getElementById('team');
-  sel.innerHTML = info.teams.map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
+  sel.innerHTML = info.teams.map((t) => {
+    const full = t.members >= info.maxTeamSize;
+    return `<option value="${t.id}" ${full ? 'disabled' : ''}>${esc(t.name)} · ${t.members}/${info.maxTeamSize}${full ? ' — full' : ''}</option>`;
+  }).join('');
+  const open = info.teams.find((t) => t.members < info.maxTeamSize);
+  if (open) sel.value = open.id;
   if (preTeam) {
     const match = info.teams.find((t) => String(t.id) === preTeam || t.name === preTeam);
     if (match) sel.value = match.id;
   }
-  const updateRepoField = () => {
-    const team = info.teams.find((t) => String(t.id) === sel.value);
-    document.getElementById('repoWrap').style.display = team && !team.has_repo ? 'block' : 'none';
-  };
+  // Nothing to join yet (or everything full, and no QR link): start a team.
+  if (!preTeam && !open) setMode('create');
   sel.onchange = updateRepoField;
   updateRepoField();
 }
 
-// Step 1: register a person (once).
+// Step 1: register a person (once) — creating the team first if needed.
 async function register() {
   const name = document.getElementById('name').value.trim();
   if (!name) return alert('Enter your name');
   const repoUrl = document.getElementById('repo').value.trim() || undefined;
+  let team = +document.getElementById('team').value;
+  if (mode === 'create') {
+    const teamName = document.getElementById('teamName').value.trim();
+    if (!teamName) return alert('Enter a team name');
+    let c;
+    try { c = await fetch(`/api/${slug}/teams`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: teamName }),
+    }); } catch { return alert('No connection — check signal and try again.'); }
+    if (!c.ok) return alert('Could not create the team: ' + (await c.text()));
+    team = (await c.json()).teamId;
+  }
   let r;
   try { r = await fetch(`/api/${slug}/members`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ teamId: teamId(), name, repoUrl }),
+    body: JSON.stringify({ teamId: team, name, repoUrl }),
   }); } catch { return alert('No connection — check signal and try again.'); }
   if (!r.ok) return alert('Registration failed: ' + (await r.text()));
+  joinedTeamId = team;
   newMemberId = (await r.json()).memberId;
   openDeviceStep();
 }
 
 // Step 2: register this phone as a tracking device (team-level or per-person).
 async function openDeviceStep() {
+  const teamUrl = `/${slug}/team/${teamId()}`;
+  document.getElementById('teamLinkDevice').href = teamUrl;
+  document.getElementById('teamLinkLive').href = teamUrl;
+  document.getElementById('boardLink').href = `/${slug}/board`;
   let r = null;
   try { r = await fetch(`/api/${slug}/team/${teamId()}`); } catch {}
   const t = r && r.ok ? await r.json() : { members: [] };

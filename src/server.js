@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { initDb, pool } from './db.js';
+import { initDb, pool, eventStatus } from './db.js';
 import adminRouter from './admin.js';
 import apiRouter from './api.js';
 import { ingestHandler } from './ingest.js';
@@ -105,8 +105,28 @@ app.get('/qr.svg', async (req, res) => {
   );
 });
 
-// Public landing: the list of events and their live boards. Admin is /admin.
-app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+// Public landing: THE event, front and centre. There's one race at a time —
+// visitors land straight on its board (leaderboard + join CTA), no event
+// picker. Live beats paused beats upcoming beats finished; among upcoming,
+// the soonest start wins. The static index only shows when nothing is
+// published (empty state / multi-event fallback).
+app.get('/', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT slug, start_at, end_at, paused_at FROM events WHERE published'
+    );
+    if (!rows.length) return res.sendFile(path.join(publicDir, 'index.html'));
+    const rank = { live: 0, paused: 1, upcoming: 2, finished: 3 };
+    const at = (e) => (e.start_at ? new Date(e.start_at).getTime() : 0);
+    rows.sort((a, b) => {
+      const d = rank[eventStatus(a)] - rank[eventStatus(b)];
+      if (d) return d;
+      // upcoming: soonest start first; otherwise most recent first
+      return eventStatus(a) === 'upcoming' ? at(a) - at(b) : at(b) - at(a);
+    });
+    res.redirect(302, `/${rows[0].slug}`);
+  } catch (err) { next(err); }
+});
 app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
 app.get('/admin', (req, res) => res.sendFile(path.join(publicDir, 'admin.html')));
 app.get('/:slug/join', (req, res) => res.sendFile(path.join(publicDir, 'join.html')));

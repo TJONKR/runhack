@@ -41,6 +41,15 @@
                text-transform: uppercase; align-self: center; margin-right: 10px; color: var(--gold); }
   .gun-final b { color: var(--orange); }
 
+  .joincta { background: var(--gold); color: var(--navy); text-decoration: none; font-weight: 900;
+             font-size: 15px; letter-spacing: -0.3px; padding: 12px 22px; border-radius: 8px;
+             white-space: nowrap; align-self: center; }
+  .joincta:hover { background: #ffd34d; }
+  #state .cta { display: inline-block; margin-top: 22px; background: var(--gold); color: var(--navy);
+                text-decoration: none; font-weight: 900; font-size: 17px; padding: 14px 28px;
+                border-radius: 8px; }
+  #state .cta:hover { background: #ffd34d; }
+
   .rulebar { font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase;
              padding: 8px 32px; color: rgba(244,243,239,0.5); border-bottom: 1px solid rgba(244,243,239,0.1);
              display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
@@ -77,6 +86,7 @@
     .gun-cell b { font-size: 18px; }
     .gun-cell span { font-size: 8px; }
     .gun-label { font-size: 9px; margin-right: 4px; }
+    .joincta { font-size: 12px; padding: 8px 14px; border-radius: 6px; }
     .rulebar { padding: 6px 14px; font-size: 9px; gap: 4px; flex-wrap: nowrap; }
     .pacerule { display: none; }
     .ryb { display: none; }
@@ -123,6 +133,7 @@
   <div class="spacer"></div>
   <div class="gun-label" id="gunlabel"></div>
   <div id="gun"></div>
+  <a class="joincta" id="joincta" href="#" style="display:none">Join the race →</a>
 </header>
 <div class="rulebar">
   <span id="scoreRule">You run. You build.</span>
@@ -172,6 +183,9 @@ async function tick() {
     lastFetchOkAt = Date.now();
     clockSkewMs = new Date(board.serverNow).getTime() - Date.now();
     document.getElementById('eventname').textContent = board.event;
+    const cta = document.getElementById('joincta');
+    cta.href = `/${slug}/join`;
+    cta.style.display = board.status === 'finished' ? 'none' : '';
     document.getElementById('scoreRule').innerHTML =
       '<span class="ryb">You run. You build. </span>Score = ' +
       (board.scoreFormula === 'km_plus_commits' ? 'km + weighted commits.' : 'km x commits.');
@@ -227,15 +241,18 @@ function renderState() {
     el.style.display = 'block';
   } else if (board.status === 'upcoming') {
     el.innerHTML = `<div class="big">NOBODY <span class="accent">SITS DOWN</span></div>
-      <div class="sub">Race hasn't started · scan your team QR to get set</div>`;
+      <div class="sub">Race hasn't started · get your team on the board</div>
+      <a class="cta" href="/${slug}/join">Join or start a team →</a>`;
     el.style.display = 'block';
   } else if (board.status === 'live' && board.teams.length === 0) {
     el.innerHTML = `<div class="big">NO TEAMS <span class="accent">YET</span></div>
-      <div class="sub">Teams appear here as they're created</div>`;
+      <div class="sub">Be the first on the board</div>
+      <a class="cta" href="/${slug}/join">Start a team →</a>`;
     el.style.display = 'block';
   } else if (board.status === 'live' && nothingYet) {
     el.innerHTML = `<div class="big">THE RACE IS <span class="accent">LIVE</span></div>
-      <div class="sub">Waiting for the first runners · scan your team QR and go</div>`;
+      <div class="sub">Waiting for the first runners</div>
+      <a class="cta" href="/${slug}/join">Join or start a team →</a>`;
     el.style.display = 'block';
   } else {
     el.style.display = 'none';

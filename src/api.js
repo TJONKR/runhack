@@ -52,18 +52,48 @@ router.get('/events', async (req, res) => {
   );
 });
 
-// Public event info for the join page: teams to pick from, no member data.
+// Public event info for the join page: teams to pick from (with headcounts,
+// so full teams can be greyed out and newcomers can find one with space),
+// no member data.
 router.get('/:slug/info', async (req, res) => {
-  const { rows } = await pool.query(
-    'SELECT id, slug, name FROM events WHERE slug = $1',
-    [req.params.slug]
-  );
+  const { rows } = await pool.query('SELECT * FROM events WHERE slug = $1', [req.params.slug]);
   if (!rows[0]) return res.status(404).json({ error: 'no such event' });
+  const config = eventConfig(rows[0]);
   const teams = await pool.query(
-    "SELECT id, name, (repo_url IS NOT NULL AND repo_url <> '') AS has_repo FROM teams WHERE event_id = $1 ORDER BY name",
+    `SELECT t.id, t.name, (t.repo_url IS NOT NULL AND t.repo_url <> '') AS has_repo,
+            (SELECT count(*)::int FROM members m WHERE m.team_id = t.id) AS members
+       FROM teams t WHERE t.event_id = $1 ORDER BY t.name`,
     [rows[0].id]
   );
-  res.json({ slug: rows[0].slug, name: rows[0].name, teams: teams.rows });
+  res.json({
+    slug: rows[0].slug,
+    name: rows[0].name,
+    status: eventStatus(rows[0]),
+    minTeamSize: config.minTeamSize,
+    maxTeamSize: config.maxTeamSize,
+    teams: teams.rows,
+  });
+});
+
+// Anyone can start a team until the race is over — onboarding is self-serve
+// (admin keeps full control in /admin). Name is the only input; the creator
+// then registers as its first runner like everyone else.
+router.post('/:slug/teams', publicWriteLimit, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM events WHERE slug = $1', [req.params.slug]);
+  const event = rows[0];
+  if (!event) return res.status(404).json({ error: 'no such event' });
+  if (eventStatus(event) === 'finished') return res.status(403).json({ error: 'the race is over — no new teams' });
+  const name = String(req.body.name || '').trim().replace(/\s+/g, ' ');
+  if (!name || name.length > 40) return res.status(400).json({ error: 'team name: 1–40 characters' });
+  // spam backstop, far above any real field size — admins can always add more
+  const count = await pool.query('SELECT count(*)::int AS n FROM teams WHERE event_id = $1', [event.id]);
+  if (count.rows[0].n >= 100) return res.status(403).json({ error: 'team limit reached — talk to the crew' });
+  const team = await pool.query(
+    'INSERT INTO teams (event_id, name) VALUES ($1, $2) ON CONFLICT (event_id, name) DO NOTHING RETURNING id, name',
+    [event.id, name]
+  );
+  if (!team.rows[0]) return res.status(409).json({ error: 'that team name is taken' });
+  res.json({ teamId: team.rows[0].id, name: team.rows[0].name });
 });
 
 // Register a person on a team (once — devices are registered separately).
@@ -71,6 +101,8 @@ router.post('/:slug/members', publicWriteLimit, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM events WHERE slug = $1', [req.params.slug]);
   const event = rows[0];
   if (!event) return res.status(404).json({ error: 'no such event' });
+
+  if (eventStatus(event) === 'finished') return res.status(403).json({ error: 'the race is over — registration closed' });
 
   const teamId = intOr(req.body.teamId);
   const { name } = req.body;
@@ -81,6 +113,13 @@ router.post('/:slug/members', publicWriteLimit, async (req, res) => {
     event.id,
   ]);
   if (!team.rows[0]) return res.status(404).json({ error: 'no such team in this event' });
+
+  // Event rule: teams of 3–4. Full team = pick another or start your own.
+  const config = eventConfig(event);
+  const size = await pool.query('SELECT count(*)::int AS n FROM members WHERE team_id = $1', [teamId]);
+  if (size.rows[0].n >= config.maxTeamSize) {
+    return res.status(403).json({ error: `team is full (max ${config.maxTeamSize} runners)` });
+  }
 
   // First runner to supply a repo sets the team's; after that it's admin-only.
   const { repoUrl } = req.body;
