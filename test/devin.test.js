@@ -16,12 +16,17 @@ const session = (over = {}) => ({
   tags: [], pull_request: null, ...over,
 });
 
-test('active = anything not finished or expired', () => {
+test('active means running right now, in either API vocabulary', () => {
+  // v1 speaks status_enum
   assert.equal(isActive(session({ status_enum: 'working' })), true);
-  assert.equal(isActive(session({ status_enum: 'blocked' })), true);
   assert.equal(isActive(session({ status_enum: 'resumed' })), true);
   assert.equal(isActive(session({ status_enum: 'finished' })), false);
   assert.equal(isActive(session({ status_enum: 'expired' })), false);
+  // v3 has no status_enum at all, and uses 'suspended' for idle sessions.
+  // Deny-listing reported a whole idle org as live; allow-listing fixes it.
+  assert.equal(isActive({ status: 'suspended' }), false);
+  assert.equal(isActive({ status: 'running' }), true);
+  assert.equal(isActive({}), false, 'unknown status is not "running"');
 });
 
 test('a session opened the night before is still a candidate if it ran on the day', () => {

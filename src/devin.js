@@ -4,12 +4,26 @@ import { pool, eventConfig, devinWindow } from './db.js';
 // are a side-stat on the board ("how hard did you drive your agent?"), and a
 // team that skips it loses nothing.
 //
-// Built on the **v1** API, deliberately. The v3 org endpoints
-// (/v3/self, /v3/organizations/{org}/sessions[/insights]) return 403 for an
-// ordinary key from app.devin.ai/settings/api-keys — they need an enterprise
-// service user with org-level permissions. v1 works with the key any
-// participant can mint in 30 seconds, and scopes to that key's own sessions,
-// which is exactly one team. Verified against the live API on 28 Aug 2026.
+// Devin hands out two kinds of key and they are MUTUALLY EXCLUSIVE. Probed
+// against the live API on 28 Aug 2026:
+//
+//   apk_user_…  personal key (app.devin.ai/settings/api-keys)
+//               v1 works, every v3 endpoint 403s
+//   cog_…       service-user key (Settings -> Service users)
+//               v3 works, every v1 endpoint 403s
+//
+// So we detect which one a team pasted and use the matching API. Neither is
+// "the" right answer — whichever a team can create in the moment is fine.
+//
+// v3 is the better road when available: one insights call returns
+// num_user_messages, acus_consumed and pull_requests[].pr_state for the whole
+// org, so a team costs one request instead of one per session, and ACUs and
+// merged-PR counts become real. v1 has no ACUs and no PR state, and needs a
+// detail call per session to count messages.
+//
+// CAUTION: v3 filters must be sent as FLAT query params. Passing them
+// JSON-encoded as qs={...} returns 200 and silently ignores the filter — a
+// window of "tomorrow onwards" still returned every session ever.
 //
 // What v1 gives us, and what it doesn't:
 //   /v1/sessions      -> session_id, status_enum, created_at, updated_at, tags,
@@ -22,9 +36,13 @@ import { pool, eventConfig, devinWindow } from './db.js';
 //                        ever get enterprise keys, read ACUs from there.
 
 const BASE = process.env.DEVIN_API_BASE || 'https://api.devin.ai';
-// status_enum seen in the wild: working, blocked, expired, finished,
-// suspended, resumed. "Still going" is anything not finished/expired.
-const DONE_STATUSES = new Set(['finished', 'expired']);
+// The two APIs disagree about status, so allow-list what "running right now"
+// means rather than deny-listing what it doesn't:
+//   v1 status_enum: working | blocked | expired | finished | suspended | resumed
+//   v3 status     : suspended | running | … (no status_enum field at all)
+// Deny-listing was wrong: v3's "suspended" isn't finished or expired, so an
+// idle org reported every session as live.
+const ACTIVE_STATUSES = new Set(['new', 'running', 'working', 'claimed', 'resuming', 'resumed']);
 const HUMAN_MESSAGE_TYPES = new Set(['initial_user_message', 'user_message']);
 
 async function devinFetch(apiKey, path) {
@@ -35,9 +53,28 @@ async function devinFetch(apiKey, path) {
   return res.json();
 }
 
-/** Validate a key at entry so a typo fails in front of whoever typed it. */
+/** Which API this key can actually talk to. Cached: a key's type never
+ *  changes, and this runs on every poll. */
+const modeCache = new Map(); // apiKey -> { mode: 'v3' | 'v1', orgId }
+export async function detectMode(apiKey) {
+  const hit = modeCache.get(apiKey);
+  if (hit) return hit;
+  let out;
+  try {
+    const self = await devinFetch(apiKey, '/v3/self');
+    out = { mode: 'v3', orgId: self.org_id };
+  } catch {
+    await devinFetch(apiKey, '/v1/sessions?limit=1'); // throws if this fails too
+    out = { mode: 'v1', orgId: null };
+  }
+  modeCache.set(apiKey, out);
+  return out;
+}
+
+/** Validate a key at entry so a typo fails in front of whoever typed it.
+ *  Accepts either kind. */
 export async function verifyKey(apiKey) {
-  await devinFetch(apiKey, '/v1/sessions?limit=1');
+  await detectMode(apiKey);
   return true;
 }
 
@@ -84,7 +121,7 @@ export function overlapsWindow(session, startMs, endMs) {
 }
 
 export function isActive(session) {
-  return !DONE_STATUSES.has(String(session.status_enum ?? session.status ?? '').toLowerCase());
+  return ACTIVE_STATUSES.has(String(session.status_enum ?? session.status ?? '').toLowerCase());
 }
 
 /** Prompts a human typed ON THE DAY — not Devin's replies, and not work done
@@ -123,7 +160,75 @@ export function aggregate(sessions, msgsBySession) {
 // re-fetch a session whose updated_at moved. A finished session never changes.
 const msgCache = new Map(); // session_id -> { updatedAt, count }
 
+/** v3: one insights request for the org, flat params, cursor-paginated. */
+async function insights(apiKey, orgId, endMs) {
+  const out = [];
+  let after = null;
+  for (let page = 0; page < 20; page++) {
+    const p = new URLSearchParams({ first: '100' });
+    // Only created_before is safe to push server-side: a session opened before
+    // the window can still have been worked in during it, and must survive to
+    // the per-message check below.
+    if (endMs) p.set('created_before', String(Math.floor(endMs / 1000)));
+    if (after) p.set('after', after);
+    const body = await devinFetch(apiKey, `/v3/organizations/${encodeURIComponent(orgId)}/sessions/insights?${p}`);
+    out.push(...(body.items ?? []));
+    if (!body.has_next_page || !body.end_cursor) break;
+    after = body.end_cursor;
+  }
+  return out;
+}
+
+/** v3 messages carry source ('user'|'devin') and created_at, so the same
+ *  on-the-day rule applies as in v1. */
+async function countV3Messages(apiKey, orgId, sessionId, startMs, endMs) {
+  let n = 0;
+  let after = null;
+  for (let page = 0; page < 20; page++) {
+    const p = new URLSearchParams({ first: '200' });
+    if (after) p.set('after', after);
+    const body = await devinFetch(
+      apiKey, `/v3/organizations/${encodeURIComponent(orgId)}/sessions/${encodeURIComponent(sessionId)}/messages?${p}`
+    );
+    for (const m of body.items ?? []) {
+      if (m.source === 'user' && within(m.created_at, startMs, endMs)) n++;
+    }
+    if (!body.has_next_page || !body.end_cursor) break;
+    after = body.end_cursor;
+  }
+  return n;
+}
+
+async function fetchV3(apiKey, orgId, startMs, endMs) {
+  const all = await insights(apiKey, orgId, endMs);
+  const sessions = all.filter((s) => overlapsWindow(s, startMs, endMs));
+  let msgs = 0, active = 0, prsOpen = 0, prsMerged = 0, acus = 0, touched = 0;
+  for (const s of sessions) {
+    const created = toMs(s.created_at);
+    const updated = toMs(s.updated_at) ?? created;
+    // The inline count covers the whole session, which is exactly right when
+    // the session both started and finished inside the window — the common
+    // case. Only a session straddling an edge needs the per-message call.
+    const wholly = (!startMs || created >= startMs) && (!endMs || updated <= endMs);
+    const n = wholly
+      ? Number(s.num_user_messages) || 0
+      : await countV3Messages(apiKey, orgId, s.session_id, startMs, endMs);
+    if (n === 0) continue;
+    touched++;
+    msgs += n;
+    acus += Number(s.acus_consumed) || 0;
+    if (isActive(s)) active++;
+    for (const pr of s.pull_requests ?? []) {
+      prsOpen++;
+      if (String(pr.pr_state).toLowerCase() === 'merged') prsMerged++;
+    }
+  }
+  return { sessions: touched, active, msgs, prsOpen, prsMerged, acus: +acus.toFixed(2) };
+}
+
 export async function fetchTeamMetrics(apiKey, startMs, endMs) {
+  const { mode, orgId } = await detectMode(apiKey);
+  if (mode === 'v3') return fetchV3(apiKey, orgId, startMs, endMs);
   const all = await listSessions(apiKey);
   const sessions = all.filter((s) => overlapsWindow(s, startMs, endMs));
   const counts = new Map();
