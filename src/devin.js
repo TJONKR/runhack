@@ -53,11 +53,33 @@ export async function listSessions(apiKey, { pageSize = 100, maxPages = 10 } = {
   return out;
 }
 
-export function inWindow(session, startMs, endMs) {
-  const t = Date.parse(session.created_at ?? '');
-  if (Number.isNaN(t)) return false;
+/** Timestamps come back as ISO strings, but be liberal: some feeds hand back
+ *  epoch seconds or millis. Returns ms, or null if it can't be read. */
+export function toMs(v) {
+  if (v == null) return null;
+  if (typeof v === 'number') return v > 1e12 ? v : v * 1000;
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? null : t;
+}
+
+export function within(value, startMs, endMs) {
+  const t = toMs(value);
+  if (t == null) return false;
   if (startMs && t < startMs) return false;
   if (endMs && t > endMs) return false;
+  return true;
+}
+
+/** A session is RELEVANT to the race day if it could have been touched during
+ *  it: created before the finish and still moving after the gun. Sessions
+ *  opened the night before are not excluded here — whether any actual work
+ *  happened on the day is decided per-message, below. */
+export function overlapsWindow(session, startMs, endMs) {
+  const created = toMs(session.created_at);
+  const updated = toMs(session.updated_at) ?? created;
+  if (created == null) return false;
+  if (endMs && created > endMs) return false;
+  if (startMs && updated != null && updated < startMs) return false;
   return true;
 }
 
@@ -65,25 +87,36 @@ export function isActive(session) {
   return !DONE_STATUSES.has(String(session.status_enum ?? session.status ?? '').toLowerCase());
 }
 
-/** Prompts a human typed — NOT Devin's replies. That's what people mean by
- *  "how many messages did you send it". */
-export function countHumanMessages(sessionDetail) {
-  return (sessionDetail.messages ?? []).filter((m) => HUMAN_MESSAGE_TYPES.has(m.type)).length;
+/** Prompts a human typed ON THE DAY — not Devin's replies, and not work done
+ *  before the gun or after the finish. Counting the messages rather than the
+ *  session is the only way "activity on the 29th" is honest: a session opened
+ *  the night before still counts for whatever was typed into it during the
+ *  race, and nothing typed after the finish sneaks in. */
+export function countHumanMessages(sessionDetail, startMs = null, endMs = null) {
+  return (sessionDetail.messages ?? []).filter(
+    (m) => HUMAN_MESSAGE_TYPES.has(m.type) && (!startMs && !endMs ? true : within(m.timestamp, startMs, endMs))
+  ).length;
 }
 
+/** Only sessions with prompts on the day are counted — a session that merely
+ *  existed through the window but was never touched is not "activity". */
 export function aggregate(sessions, msgsBySession) {
   let active = 0;
   let prs = 0;
   let msgs = 0;
+  let touched = 0;
   for (const s of sessions) {
+    const n = msgsBySession.get(s.session_id) ?? 0;
+    if (n === 0) continue;
+    touched++;
     if (isActive(s)) active++;
     if (s.pull_request?.url) prs++;
-    msgs += msgsBySession.get(s.session_id) ?? 0;
+    msgs += n;
   }
   // prsMerged/acus stay 0: v1 exposes only pull_request.url (no state) and no
   // ACUs at all. Columns are kept so a future enterprise key can fill them in
   // from v3 insights without another migration.
-  return { sessions: sessions.length, active, msgs, prsOpen: prs, prsMerged: 0, acus: 0 };
+  return { sessions: touched, active, msgs, prsOpen: prs, prsMerged: 0, acus: 0 };
 }
 
 // Message counts need a detail call per session, so cache them and only
@@ -92,22 +125,23 @@ const msgCache = new Map(); // session_id -> { updatedAt, count }
 
 export async function fetchTeamMetrics(apiKey, startMs, endMs) {
   const all = await listSessions(apiKey);
-  const sessions = all.filter((s) => inWindow(s, startMs, endMs));
+  const sessions = all.filter((s) => overlapsWindow(s, startMs, endMs));
   const counts = new Map();
   const CONCURRENCY = 4;
   for (let i = 0; i < sessions.length; i += CONCURRENCY) {
     const batch = sessions.slice(i, i + CONCURRENCY);
     await Promise.all(
       batch.map(async (s) => {
-        const cached = msgCache.get(s.session_id);
+        const cacheKey = `${s.session_id}:${startMs}:${endMs}`;
+        const cached = msgCache.get(cacheKey);
         if (cached && cached.updatedAt === s.updated_at) {
           counts.set(s.session_id, cached.count);
           return;
         }
         try {
           const detail = await devinFetch(apiKey, `/v1/session/${encodeURIComponent(s.session_id)}`);
-          const count = countHumanMessages(detail);
-          msgCache.set(s.session_id, { updatedAt: s.updated_at, count });
+          const count = countHumanMessages(detail, startMs, endMs);
+          msgCache.set(cacheKey, { updatedAt: s.updated_at, count });
           counts.set(s.session_id, count);
         } catch {
           // one unreadable session must not sink the team's whole line
