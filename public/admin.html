@@ -362,11 +362,26 @@
     <div class="etab" id="tab-map">
       <div id="mapside">
         <h2>Zones <span style="color:rgba(244,243,239,0.4)">(lap order · 0 = start/finish)</span></h2>
-        <div id="drawing-banner">Click map corners, then Finish zone.</div>
+        <div id="drawing-banner">Map is locked while drawing. Click each corner, then Finish zone.</div>
+        <div id="quickBanner" style="display:none;background:var(--sky);color:var(--navy);
+             padding:8px 10px;border-radius:4px;margin-bottom:6px;font-size:12px">
+          Click the spot on the track — the box lands centred there.</div>
         <div id="zoneList"></div>
         <div class="row">
-          <button onclick="startZone()">+ Draw zone</button>
+          <button class="primary" onclick="startQuickBox()">⬛ Drop a box</button>
+          <button onclick="startZone()">+ Draw corners</button>
           <button id="finishZoneBtn" class="primary" onclick="finishZone()" style="display:none">Finish zone</button>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <label style="flex:1;font-size:11px">across m
+              <input id="boxWidth" type="number" value="30" style="width:100%"></label>
+            <label style="flex:1;font-size:11px">along m
+              <input id="boxDepth" type="number" value="25" style="width:100%"></label>
+            <label style="flex:1;font-size:11px">angle °
+              <input id="boxBearing" type="number" value="0" style="width:100%"></label>
+          </div>
+          <p class="muted" style="font-size:11px;margin:4px 0 0">
+            Drop a box on the start/finish first (that is zone 0), then one on the far side.
+            Angle turns the box to line up with the track. Corners stay draggable after.</p>
         </div>
 
         <h2>Timing gate <span style="color:rgba(244,243,239,0.4)">(optional)</span></h2>
@@ -1136,6 +1151,7 @@ function ensureMap() {
     maxZoom: 20, attribution: '&copy; OpenStreetMap',
   }).addTo(map);
   map.on('click', (e) => {
+    if (quickBox) { placeQuickBox(e.latlng); return; }
     if (gateDrawing) {
       gateDrawing.push([e.latlng.lat, e.latlng.lng]);
       if (gateDrawing.length === 2) { gate = gateDrawing; gateDrawing = null; redrawGate(); }
@@ -1148,6 +1164,53 @@ function ensureMap() {
     drawing.line = L.polyline(drawing.points, { dashArray: '4' }).addTo(map);
   });
 }
+// Lock/unlock map panning while a zone is being drawn, and make the cursor
+// say which mode you are in.
+function setDrawInteraction(interactive) {
+  if (!map) return;
+  const c = map.getContainer();
+  if (interactive) {
+    map.dragging.enable();
+    c.style.cursor = '';
+  } else {
+    map.dragging.disable();
+    c.style.cursor = 'crosshair';
+  }
+}
+
+// One-click zone: drop a correctly-sized box on the spot you click, aligned
+// across the running direction. Clicking four corners accurately on a phone
+// at the trackside is miserable; this gets a usable box down in one tap and
+// the corners can still be dragged afterwards.
+let quickBox = null;
+function startQuickBox() {
+  if (drawing) finishZone();
+  quickBox = true;
+  document.getElementById('quickBanner').style.display = 'block';
+  setDrawInteraction(false);
+}
+function placeQuickBox(latlng) {
+  const R = 6378137, d2r = Math.PI / 180;
+  const width = Number(document.getElementById('boxWidth').value) || 30;   // across the path
+  const depth = Number(document.getElementById('boxDepth').value) || 25;   // along the path
+  const brg = (Number(document.getElementById('boxBearing').value) || 0) * d2r;
+  const dLat = (m) => (m / R) / d2r;
+  const dLng = (m, lat) => (m / (R * Math.cos(lat * d2r))) / d2r;
+  const ax = Math.sin(brg), ay = Math.cos(brg);
+  const cx = Math.cos(brg), cy = -Math.sin(brg);
+  const polygon = [[+depth / 2, +width / 2], [+depth / 2, -width / 2],
+                   [-depth / 2, -width / 2], [-depth / 2, +width / 2]]
+    .map(([along, across]) => [
+      +(latlng.lat + dLat(along * ay + across * cy)).toFixed(7),
+      +(latlng.lng + dLng(along * ax + across * cx, latlng.lat)).toFixed(7),
+    ]);
+  zones.push({ name: zones.length === 0 ? 'start' : `checkpoint ${zones.length}`, polygon });
+  redrawZones();
+  quickBox = null;
+  document.getElementById('quickBanner').style.display = 'none';
+  setDrawInteraction(true);
+}
+
 /* ---------- timing gate ---------- */
 let gate = null, gateLayer = null, gateDrawing = null;
 function redrawGate() {
@@ -1307,6 +1370,11 @@ function startZone() {
   drawing = { points: [], markers: [], line: null };
   document.getElementById('drawing-banner').style.display = 'block';
   document.getElementById('finishZoneBtn').style.display = 'inline-block';
+  // Panning and corner-placing are the same gesture, and Leaflet resolves the
+  // ambiguity by swallowing any click that moved a pixel — which on a trackpad
+  // is every click. Lock the map while drawing; pan with the arrow keys or
+  // finish the zone first.
+  setDrawInteraction(false);
 }
 function finishZone() {
   if (drawing && drawing.points.length >= 3) {
@@ -1322,6 +1390,7 @@ function finishZone() {
   drawing = null;
   document.getElementById('drawing-banner').style.display = 'none';
   document.getElementById('finishZoneBtn').style.display = 'none';
+  setDrawInteraction(true);
   redrawZones();
 }
 // Zones save with the event's stored fields — no need to visit Setup first.
