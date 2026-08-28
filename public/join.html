@@ -43,6 +43,13 @@
   a.teamlink { display: block; text-align: center; margin-top: 18px; color: var(--sky);
                font-weight: 700; text-decoration: none; }
   a.teamlink:hover { text-decoration: underline; }
+  a.storebtn { display: block; text-align: center; padding: 15px; font-size: 16px; font-weight: 700;
+               border-radius: 8px; margin-top: 22px; text-decoration: none; color: var(--gold);
+               border: 1px solid rgba(240,190,42,0.55); background: rgba(240,190,42,0.07); }
+  a.storebtn:hover { background: rgba(240,190,42,0.14); }
+  a.storebtn span { display: block; font-family: 'Geist Mono', monospace; font-size: 10px;
+                    font-weight: 400; letter-spacing: 0.18em; text-transform: uppercase;
+                    color: rgba(244,243,239,0.55); margin-top: 3px; }
   .step { display: none; }
   .step.active { display: block; }
   .status { text-align: center; padding: 28px 0 8px; font-size: 17px; font-weight: 700; }
@@ -119,14 +126,16 @@
 
   <div class="step" id="step-traccar">
     <div class="status">Now connect the Traccar app</div>
-    <button onclick="openTraccar()">Open Traccar with our settings</button>
+    <a class="storebtn" id="storeIos" href="https://apps.apple.com/app/traccar-client/id843156974"
+       target="_blank" rel="noopener">1 · Install Traccar Client <span>free · App Store</span></a>
+    <a class="storebtn" id="storeAndroid" href="https://play.google.com/store/apps/details?id=org.traccar.client"
+       target="_blank" rel="noopener">1 · Install Traccar Client <span>free · Google Play</span></a>
+    <button onclick="openTraccar()">2 · Open Traccar with our settings</button>
+    <p class="muted" style="text-align:center;margin-top:10px">Already have Traccar? Skip straight to 2.</p>
     <button class="secondary" onclick="showManual()">Nothing happened?</button>
     <div id="manual" style="display:none">
-      <p class="muted">1. Install Traccar Client:
-        <a href="https://apps.apple.com/app/traccar-client/id843156974">iPhone</a> ·
-        <a href="https://play.google.com/store/apps/details?id=org.traccar.client">Android</a></p>
-      <p class="muted">2. Then tap the button above again. If it still doesn't configure itself,
-        set these manually in Traccar and start the service:</p>
+      <p class="muted">Installed Traccar and tapped 2, but it didn't configure itself?
+        Set these manually in Traccar and start the service:</p>
       <p class="muted">Server URL: <code id="manualUrl"></code><br>
          Device identifier: <code id="manualId"></code><br>
          Accuracy: high · Interval: 2s · Distance: 10m</p>
@@ -152,6 +161,11 @@ let newMemberId = null;    // person just registered on this phone
 let joinedTeamId = null;   // team joined/created on this phone
 let info = null;
 let mode = 'join';
+
+// Show the store button for THIS phone; unknown platform (desktop) keeps both.
+const ua = navigator.userAgent;
+if (/iPhone|iPad|iPod/.test(ua)) document.getElementById('storeAndroid').style.display = 'none';
+else if (/Android/.test(ua)) document.getElementById('storeIos').style.display = 'none';
 
 // The team the rest of the flow (device setup, team links) refers to:
 // whichever team was just joined/created, else the one picked in the select.
