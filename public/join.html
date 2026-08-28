@@ -80,6 +80,7 @@
                 color: rgba(244,243,239,0.75); }
   a { color: var(--sky); }
   .opt { color: rgba(244,243,239,0.35); letter-spacing: 0.12em; }
+  .prize { color: var(--gold); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -103,10 +104,13 @@
       <label>Team name</label>
       <input id="teamName" placeholder="e.g. Prompt Pacers" autocomplete="off" maxlength="40">
       <label>Devin API key <span class="opt">optional</span></label>
-      <input id="devinKey" placeholder="cog_…" autocomplete="off" type="password" maxlength="200">
-      <p class="muted" style="margin-top:8px">Using Devin today? Paste your team's event key and the
-        board shows your sessions, prompts, PRs and ACUs live. Purely for the bragging rights —
-        it doesn't affect your score, and skipping it costs you nothing.</p>
+      <input id="devinKey" placeholder="cog_… or apk_user_…" autocomplete="off" type="password" maxlength="200">
+      <p class="muted" style="margin-top:8px">Using Devin today? Paste your key and the board shows
+        your sessions, prompts, PRs and ACUs as you go. It doesn't touch your score — but
+        <b class="prize">there's a prize for whoever sends Devin the most prompts</b>, and we can only
+        count yours if the key is in here.<br>
+        <a href="https://app.devin.ai/settings/api-keys" target="_blank" rel="noopener">
+          Grab your key from Devin settings →</a></p>
     </div>
     <label>Your name</label>
     <input id="name" placeholder="runner name" autocomplete="off">
