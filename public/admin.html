@@ -620,9 +620,14 @@ function renderChecklist() {
   const gateOk = !!cur.config?.gate;
   const timesOk = !!cur.start_at && !!cur.end_at;
   const teams = cur.teams || [];
-  const teamsOk = teams.length > 0;
-  const reposOk = teams.length > 0 && teams.every((t) => t.repo_status === 'connected');
   const devicesOk = teams.some((t) => Number(t.connected_count) > 0);
+  // Calibration is the other silent killer next to missing zones: leave the
+  // 400m-track defaults on a 600m park loop and EVERY lap is rejected as
+  // too_slow, with a board that looks perfectly healthy. Treat it as done
+  // only when the distance has been set deliberately for this venue.
+  const lapOk = Number.isFinite(Number(cur.config?.lapM));
+  const cfgLapM = Number(cur.config?.lapM) || 400;
+  const cfgMax = Number(cur.config?.maxLapS) || 147;
   const pubOk = !!cur.published;
   const item = (ok, label, tab, hint = '') => `
     <div class="row" style="font-size:13px">
@@ -633,15 +638,17 @@ function renderChecklist() {
   document.getElementById('checklist').innerHTML =
     item(zonesOk, 'Draw the two geofence zones on the venue walk', 'map',
       '(start/finish + back straight, overshoot the track edge 10–15m)') +
+    item(lapOk, 'Measure the loop and set the lap window', 'setup',
+      `(currently ${cfgLapM}m, max ${cfgMax}s — wrong distance means every lap is rejected)`) +
     item(gateOk, 'Draw the timing gate (optional)', 'map', '(a line across the track inside the start box)') +
     item(timesOk, 'Set start & end times', null, '(below — or use Start now on the day)') +
-    item(teamsOk, `Create the teams${teams.length ? ` (${teams.length})` : ''}`, 'teams') +
-    item(reposOk, 'Every team\u2019s GitHub repo connected + tested', 'teams',
-      '(the test button on each team card)') +
     item(devicesOk, 'At least one phone connected and pinging', 'logs',
       '(scan a team QR, connect Traccar, watch the Logs tab)') +
     item(pubOk, 'Publish to the landing page when ready', null, '(button above in Race)') +
     `<div class="muted" style="margin-top:8px;font-size:12px">
+      Teams sign themselves up — ${teams.length
+        ? `${teams.length} so far.`
+        : 'none yet; they appear here as they join.'} You only need Teams to fix something.<br>
       Day-of quick reference: handoffs need nothing — any connected phone scores its laps
       automatically (one lap per team at a time). Fix anything in Teams (laps, scores) or Runners
       (devices). Pause/End in Race above. Watch pings live in Logs.</div>`;
