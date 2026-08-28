@@ -13,7 +13,18 @@
           --line: rgba(244,243,239,0.15); }
   * { box-sizing: border-box; }
   body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy);
-         color: var(--paper); min-height: 100vh; display: flex; flex-direction: column; }
+         color: var(--paper); min-height: 100vh; display: flex; flex-direction: column;
+         position: relative; }
+  /* Same floodlit-track atmosphere as the board (see board.html). */
+  body::before { content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+                 background: radial-gradient(120% 60% at 50% -10%, rgba(19,17,209,0.30) 0%, rgba(8,24,47,0) 62%); }
+  body::after { content: ''; position: fixed; left: 0; right: 0; bottom: 0; height: 55vh; z-index: 0;
+                pointer-events: none; opacity: 0.75;
+                background: repeating-linear-gradient(96deg, transparent 0 78px,
+                            rgba(244,243,239,0.075) 78px 80px);
+                -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 100%);
+                mask-image: linear-gradient(to top, #000 0%, transparent 100%); }
+  body > * { position: relative; z-index: 1; }
   header { background: var(--blue); border-bottom: 3px solid var(--gold); padding: 14px 24px; }
   .wordmark { font-weight: 900; font-size: 24px; letter-spacing: -1px; line-height: 1; }
   .wordmark .slash { color: var(--orange); }

@@ -14,13 +14,29 @@
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
+  /* Night race: floodlit track after dark. A wash of light behind the leader
+     board, over lane lines that fade out before they can fight the data. */
   body { font-family: 'Geist', system-ui, sans-serif; margin: 0; background: var(--navy); color: var(--paper);
-         display: flex; flex-direction: column; }
-  main { flex: 1; min-height: 0; overflow-y: auto; }
+         display: flex; flex-direction: column; position: relative; }
+  body::before { content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+                 background:
+                   radial-gradient(120% 70% at 50% -10%, rgba(19,17,209,0.30) 0%, rgba(8,24,47,0) 60%),
+                   radial-gradient(90% 50% at 50% 110%, rgba(58,144,230,0.13) 0%, rgba(8,24,47,0) 70%); }
+  /* Lane lines: only in the lower third, so the table never sits on stripes. */
+  body::after { content: ''; position: fixed; left: 0; right: 0; bottom: 0; height: 55vh; z-index: 0;
+                pointer-events: none; opacity: 0.75;
+                background: repeating-linear-gradient(96deg, transparent 0 78px,
+                            rgba(244,243,239,0.075) 78px 80px);
+                -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 100%);
+                mask-image: linear-gradient(to top, #000 0%, transparent 100%); }
+  body > * { position: relative; z-index: 1; }
+  main { flex: 1; min-height: 0; overflow-y: auto; padding: 0 20px 20px; }
   .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
 
-  header { background: var(--blue); padding: 18px 32px; display: flex; align-items: center; gap: 24px;
-           border-bottom: 4px solid var(--gold); flex-wrap: wrap; }
+  header { background: linear-gradient(180deg, #1a18e0 0%, var(--blue) 55%, #0f0da8 100%);
+           padding: 18px 32px; display: flex; align-items: center; gap: 24px;
+           border-bottom: 4px solid var(--gold); flex-wrap: wrap;
+           box-shadow: 0 10px 44px rgba(19,17,209,0.42); }
   .wordmark { font-weight: 900; font-size: 34px; letter-spacing: -1.5px; white-space: nowrap; line-height: 1; }
   .wordmark .slash { color: var(--orange); }
   .powered { display: flex; align-items: center; gap: 7px; margin-top: 5px;
@@ -33,7 +49,8 @@
 
   /* countdown — "starting gun" style */
   #gun { display: flex; gap: 2px; align-items: stretch; }
-  .gun-cell { background: rgba(8,24,47,0.55); padding: 6px 14px; text-align: center; min-width: 72px; }
+  .gun-cell { background: rgba(8,24,47,0.55); padding: 6px 14px; text-align: center; min-width: 72px;
+              border-radius: 6px; }
   .gun-cell b { display: block; font-family: 'Geist Mono', monospace; font-size: 30px; font-weight: 600; }
   .gun-cell span { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.2em;
                    color: rgba(244,243,239,0.55); text-transform: uppercase; }
@@ -54,6 +71,24 @@
              padding: 8px 32px; color: rgba(244,243,239,0.5); border-bottom: 1px solid rgba(244,243,239,0.1);
              display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 
+  /* Race vitals — all three read straight off the live board data. */
+  .vitals { display: flex; gap: 12px; padding: 18px 12px 14px; flex-wrap: wrap; }
+  .vital { flex: 1; min-width: 150px; background: linear-gradient(180deg, rgba(244,243,239,0.075), rgba(244,243,239,0.03));
+           border: 1px solid rgba(244,243,239,0.12); border-radius: 12px; padding: 12px 18px; }
+  .vital span { display: block; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.22em;
+                text-transform: uppercase; color: rgba(244,243,239,0.5); }
+  .vital b { display: block; font-family: 'Geist Mono', monospace; font-size: 30px; font-weight: 600;
+             line-height: 1.15; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .vital.km b { color: var(--orange); }
+  .vital.commits b { color: var(--sky); }
+  .vital.teams b { color: var(--paper); }
+  .vital i { font-style: normal; font-size: 14px; color: rgba(244,243,239,0.45); margin-left: 4px;
+             letter-spacing: 0; }
+
+  /* The board itself: an elevated surface lifted off the night background. */
+  .board-card { background: linear-gradient(180deg, rgba(12,33,64,0.94), rgba(8,24,47,0.88));
+                border: 1px solid rgba(244,243,239,0.13); border-radius: 14px; overflow: hidden;
+                box-shadow: 0 24px 70px rgba(0,0,0,0.42); }
   table { width: 100%; border-collapse: collapse; font-size: 21px; }
   th { text-align: left; color: rgba(244,243,239,0.45); font-family: 'Geist Mono', monospace; font-size: 11px;
        text-transform: uppercase; letter-spacing: 0.15em; padding: 14px 16px 6px; font-weight: 400; }
@@ -63,16 +98,35 @@
   .move { display: block; font-size: 10px; line-height: 1; margin-top: 2px; }
   .move.up { color: #4ade80; }
   .move.down { color: var(--orange); }
+  /* Leader: lit from within, gold rail down the left edge. */
+  tr.first td { background: linear-gradient(90deg, rgba(240,190,42,0.13), rgba(240,190,42,0.02) 60%); }
+  tr.first td.rank { box-shadow: inset 3px 0 0 var(--gold); }
   tr.first td.rank, tr.first td.score { color: var(--gold); }
+  tr.first td.score { text-shadow: 0 0 22px rgba(240,190,42,0.5); }
+  tr.first td.team { color: #fff; }
+  /* Currently running: floodlit row + a live pill. */
+  tr.live td { background: rgba(74,222,128,0.07); }
+  tr.live td.rank { box-shadow: inset 3px 0 0 #4ade80; }
+  tr.first.live td.rank { box-shadow: inset 3px 0 0 var(--gold); }
+  .livepill { font-family: 'Geist Mono', monospace; font-size: 9px; letter-spacing: 0.16em;
+              text-transform: uppercase; color: #4ade80; border: 1px solid rgba(74,222,128,0.5);
+              border-radius: 999px; padding: 2px 8px; margin-left: 8px; vertical-align: middle;
+              animation: livepulse 2.4s ease-in-out infinite; }
+  @keyframes livepulse { 50% { opacity: 0.45; } }
+  @media (prefers-reduced-motion: reduce) { .livepill { animation: none; } }
   td.team { font-weight: 700; }
-  td.score { font-weight: 900; color: var(--sky); font-size: 24px; }
+  td.score { font-weight: 900; color: var(--sky); font-size: 26px; letter-spacing: -0.5px; }
   td.km { color: var(--orange); font-weight: 700; }
+  td.laps, td.commits { font-variant-numeric: tabular-nums; }
   .runner { color: rgba(244,243,239,0.65); font-size: 15px; }
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }
   .running { background: #4ade80; box-shadow: 0 0 8px #4ade80; } .stopped { background: var(--gold); } .idle { background: #333f52; }
   .lap-valid { color: #4ade80; } .lap-invalid { color: var(--orange); }
   tr.rowlink { cursor: pointer; }
-  tr.rowlink:hover td { background: rgba(244,243,239,0.04); }
+  tr.rowlink:hover td { background: rgba(244,243,239,0.06); }
+  th:first-child, td:first-child { padding-left: 22px; }
+  th:last-child, td:last-child { padding-right: 22px; }
+  thead th { background: rgba(8,24,47,0.5); }
 
   /* phones: rank · team · runner · laps · km · score; commits + lap detail
      live on the team page a tap away */
@@ -90,8 +144,20 @@
     .rulebar { padding: 6px 14px; font-size: 9px; gap: 4px; flex-wrap: nowrap; }
     .pacerule { display: none; }
     .ryb { display: none; }
+    /* Phones: the card goes full-bleed — every horizontal pixel belongs to
+       the numbers, or the score column clips. */
+    main { padding: 0; }
+    .vitals { gap: 6px; padding: 10px 8px 8px; }
+    .vital { min-width: 0; padding: 7px 10px; border-radius: 9px; }
+    .vital b { font-size: 18px; }
+    .vital i { font-size: 10px; }
+    .vital span { font-size: 8px; letter-spacing: 0.12em; }
+    .board-card { border-radius: 0; border-left: 0; border-right: 0; box-shadow: none; }
+    .livepill { display: none; }
     table { font-size: 15px; }
     th, td { padding: 8px 5px; }
+    th:first-child, td:first-child { padding-left: 8px; }
+    th:last-child, td:last-child { padding-right: 8px; }
     td.rank { width: 22px; }
     .runner { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
               display: inline-block; vertical-align: middle; }
@@ -141,15 +207,22 @@
   <span class="pacerule">Pace rule: slower than 7'00"/km isn't running.</span>
 </div>
 <main>
+  <div class="vitals" id="vitals" style="display:none">
+    <div class="vital km"><span>Distance run</span><b id="vKm">0.0<i>km</i></b></div>
+    <div class="vital commits"><span>Commits shipped</span><b id="vCommits">0</b></div>
+    <div class="vital teams"><span>On track now</span><b id="vTeams">0<i id="vTeamsOf"></i></b></div>
+  </div>
   <div id="state" style="display:none"></div>
-  <table>
-    <thead><tr>
-      <th></th><th>Team</th><th>Runner</th>
-      <th class="num">Laps</th><th class="num">KM</th><th class="num">Commits</th>
-      <th class="num">Score</th><th class="num">Last lap</th><th class="num">Avg lap</th>
-    </tr></thead>
-    <tbody id="rows"></tbody>
-  </table>
+  <div class="board-card">
+    <table>
+      <thead><tr>
+        <th></th><th>Team</th><th>Runner</th>
+        <th class="num">Laps</th><th class="num">KM</th><th class="num">Commits</th>
+        <th class="num">Score</th><th class="num">Last lap</th><th class="num">Avg lap</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
 </main>
 <footer id="sponsor-bar"></footer>
 <script src="/sponsor-bar.js"></script>
@@ -190,6 +263,7 @@ async function tick() {
       '<span class="ryb">You run. You build. </span>Score = ' +
       (board.scoreFormula === 'km_plus_commits' ? 'km + weighted commits.' : 'km x commits.');
     renderState();
+    renderVitals();
     document.getElementById('rows').innerHTML = board.teams.map((t, i) => {
       const move = t.move
         ? `<span class="move ${t.move}">${t.move === 'up' ? '▲' : '▼'}</span>` : '';
@@ -206,19 +280,35 @@ async function tick() {
       const commit = t.lastCommit
         ? `<span class="commitline" title="${esc(t.lastCommit.author || '')}">↑ ${esc(t.lastCommit.message)} · ${fmtAgo(t.lastCommit.agoS)}</span>`
         : '';
-      return `<tr class="${i === 0 ? 'first' : ''} rowlink" onclick="location.href='/${slug}/team/${t.teamId}'">
+      const live = t.status === 'running';
+      return `<tr class="${i === 0 ? 'first' : ''} ${live ? 'live' : ''} rowlink" onclick="location.href='/${slug}/team/${t.teamId}'">
         <td class="rank">${String(i + 1).padStart(2, '0')}${move}</td>
         <td class="team">${esc(t.team)}${commit}</td>
-        <td><span class="dot ${t.status}"></span><span class="runner">${t.runner ? esc(t.runner) : '—'}</span></td>
-        <td class="num">${t.laps}</td>
+        <td><span class="dot ${t.status}"></span><span class="runner">${t.runner ? esc(t.runner) : '—'}</span>${
+          live ? '<span class="livepill">live</span>' : ''}</td>
+        <td class="num laps">${t.laps}</td>
         <td class="num km">${t.km.toFixed(1)}</td>
-        <td class="num">${t.commits}</td>
+        <td class="num commits">${t.commits}</td>
         <td class="num score">${t.score}</td>
         <td class="num">${lapCell}</td>
         <td class="num">${avgCell}</td>
       </tr>`;
     }).join('');
   } catch {}
+}
+
+// Race vitals: the whole field at a glance, summed from the same board data
+// the table renders — no separate endpoint, no invented targets.
+function renderVitals() {
+  const el = document.getElementById('vitals');
+  if (!board || !board.teams.length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  const km = board.teams.reduce((s, t) => s + t.km, 0);
+  const commits = board.teams.reduce((s, t) => s + t.commits, 0);
+  const running = board.teams.filter((t) => t.status === 'running').length;
+  document.getElementById('vKm').innerHTML = `${km.toFixed(1)}<i>km</i>`;
+  document.getElementById('vCommits').textContent = commits;
+  document.getElementById('vTeams').innerHTML = `${running}<i>/${board.teams.length} teams</i>`;
 }
 
 // Pre-race / quiet-race states. The table stays visible underneath so team
