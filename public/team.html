@@ -109,6 +109,7 @@
       <div class="stat"><b id="km">0.0</b><span>km</span></div>
       <div class="stat"><b id="runners">0</b><span>runners</span><span class="sub" id="perRunner"></span></div>
       <div class="stat devin" id="devinStat" style="display:none"><b id="devinMsgs">0</b><span>devin prompts</span><span class="sub" id="devinSessions"></span></div>
+      <div class="stat devin" id="devinAcuStat" style="display:none"><b id="devinAcus">0</b><span>acus</span><span class="sub" id="devinPrs"></span></div>
       <div class="stat best"><b id="bestlap">—</b><span>best lap</span><span class="sub" id="bestpace"></span></div>
       <div class="stat"><b id="avglap">—</b><span>avg lap</span><span class="sub" id="avgpace"></span></div>
       <div class="stat"><b id="lastlap">—</b><span>last lap</span><span class="sub" id="lastpace"></span></div>
@@ -171,10 +172,19 @@ async function tick() {
     const dv = document.getElementById('devinStat');
     if (t.devin) {
       dv.style.display = '';
-      document.getElementById('devinMsgs').textContent = t.devin.messages;
+      document.getElementById('devinMsgs').textContent = t.devin.msgs;
       document.getElementById('devinSessions').textContent =
-        `${t.devin.sessions} ${t.devin.sessions === 1 ? 'session' : 'sessions'}`;
-    } else dv.style.display = 'none';
+        `${t.devin.sessions} ${t.devin.sessions === 1 ? 'session' : 'sessions'}` +
+        (t.devin.active ? ` · ${t.devin.active} running` : '');
+      const da = document.getElementById('devinAcuStat');
+      da.style.display = '';
+      document.getElementById('devinAcus').textContent = t.devin.acus;
+      document.getElementById('devinPrs').textContent =
+        t.devin.prsOpen ? `${t.devin.prsMerged}/${t.devin.prsOpen} PRs merged` : '';
+    } else {
+      dv.style.display = 'none';
+      document.getElementById('devinAcuStat').style.display = 'none';
+    }
     bestlap.textContent = t.bestLapS != null ? t.bestLapS + 's' : '—';
     bestpace.textContent = pace(t.bestPaceSPerKm);
     avglap.textContent = t.avgLapS != null ? t.avgLapS + 's' : '—';

@@ -102,12 +102,11 @@
     <div id="createFields" style="display:none">
       <label>Team name</label>
       <input id="teamName" placeholder="e.g. Prompt Pacers" autocomplete="off" maxlength="40">
-      <label>Devin email <span class="opt">optional</span></label>
-      <input id="devinEmail" placeholder="you@yourteam.com" autocomplete="off"
-             inputmode="email" type="email" maxlength="120">
-      <p class="muted" style="margin-top:8px">Working in Devin? Drop the email you use there and
-        the board shows how hard your team drove its agent. Just for the bragging rights —
-        it doesn't affect your score.</p>
+      <label>Devin API key <span class="opt">optional</span></label>
+      <input id="devinKey" placeholder="cog_…" autocomplete="off" type="password" maxlength="200">
+      <p class="muted" style="margin-top:8px">Using Devin today? Paste your team's event key and the
+        board shows your sessions, prompts, PRs and ACUs live. Purely for the bragging rights —
+        it doesn't affect your score, and skipping it costs you nothing.</p>
     </div>
     <label>Your name</label>
     <input id="name" placeholder="runner name" autocomplete="off">
@@ -245,14 +244,18 @@ async function register() {
   if (mode === 'create') {
     const teamName = document.getElementById('teamName').value.trim();
     if (!teamName) return alert('Enter a team name');
-    const devinEmail = document.getElementById('devinEmail').value.trim() || undefined;
+    const devinKey = document.getElementById('devinKey').value.trim() || undefined;
     let c;
     try { c = await fetch(`/api/${slug}/teams`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: teamName, devinEmail }),
+      body: JSON.stringify({ name: teamName, devinKey }),
     }); } catch { return alert('No connection — check signal and try again.'); }
-    if (!c.ok) return alert('Could not create the team: ' + (await c.text()));
+    if (!c.ok) {
+      let msg = await c.text();
+      try { msg = JSON.parse(msg).error || msg; } catch {}
+      return alert('Could not create the team: ' + msg);
+    }
     team = (await c.json()).teamId;
   }
   let r;

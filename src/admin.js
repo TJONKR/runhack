@@ -1,12 +1,20 @@
 import { Router } from 'express';
 import { pool } from './db.js';
 import { countCommits, pollOnce } from './github.js';
+import { fetchSelf, fetchTeamMetrics } from './devin.js';
 import { readIngestLog, clearIngestLog } from './ingestLog.js';
 
 const router = Router();
 
 // Body values destined for integer columns: returns a safe int or null —
 // never NaN/garbage that Postgres would throw on (see the /team/test crash).
+// A team's Devin API key must never leave the server — not even to an
+// authenticated admin. Responses carry a has_devin flag instead.
+function withoutDevinKey(team) {
+  const { devin_api_key, ...safe } = team;
+  return { ...safe, has_devin: !!devin_api_key };
+}
+
 function intOr(v, fallback = null) {
   const n = Number(v);
   return Number.isInteger(n) && Math.abs(n) < 2_000_000_000 ? n : fallback;
@@ -129,7 +137,7 @@ router.get('/events/:slug', async (req, res) => {
        FROM teams t WHERE t.event_id = $1 ORDER BY t.name`,
     [rows[0].id]
   );
-  res.json({ ...rows[0], teams: teams.rows });
+  res.json({ ...rows[0], teams: teams.rows.map(withoutDevinKey) });
 });
 
 router.post('/events/:slug/teams', async (req, res) => {
@@ -142,7 +150,7 @@ router.post('/events/:slug/teams', async (req, res) => {
      ON CONFLICT (event_id, name) DO UPDATE SET name = $2 RETURNING *`,
     [rows[0].id, name]
   );
-  res.json(team.rows[0]);
+  res.json(withoutDevinKey(team.rows[0]));
 });
 
 // Event lifecycle: start_now / end_now / pause / resume.
@@ -357,7 +365,7 @@ router.patch('/events/:slug/teams/:teamId', async (req, res) => {
     vals
   );
   if (!rows[0]) return res.status(404).json({ error: 'no such team' });
-  res.json(rows[0]);
+  res.json(withoutDevinKey(rows[0]));
 });
 
 // Test a team's GitHub connection right now: reachable, public, and counts
@@ -559,6 +567,59 @@ router.delete('/events/:slug/teams/:teamId', async (req, res) => {
     [req.params.teamId, req.params.slug]
   );
   res.json({ ok: true });
+});
+
+// Store or clear a team's Devin credentials. Organisers can do this for a
+// team that would rather not paste a key into a public form. The key is
+// write-only from the API's point of view.
+router.post('/events/:slug/teams/:teamId/devin', async (req, res) => {
+  const event = await pool.query('SELECT id FROM events WHERE slug = $1', [req.params.slug]);
+  if (!event.rows[0]) return res.status(404).json({ error: 'no such event' });
+  const apiKey = req.body.apiKey?.toString().trim() || null;
+  let orgId = req.body.orgId?.toString().trim() || null;
+  if (apiKey && !orgId) {
+    try {
+      orgId = (await fetchSelf(apiKey)).org_id;
+    } catch {
+      return res.status(400).json({ ok: false, error: 'Devin rejected that key' });
+    }
+  }
+  const { rows } = await pool.query(
+    `UPDATE teams SET devin_org_id = $1, devin_api_key = $2, devin_status = NULL
+      WHERE id = $3 AND event_id = $4
+      RETURNING devin_api_key`,
+    [orgId, apiKey, req.params.teamId, event.rows[0].id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'no such team' });
+  res.json({ ok: true, hasKey: !!rows[0].devin_api_key });
+});
+
+// Test a team's Devin connection now and persist what comes back.
+router.post('/events/:slug/teams/:teamId/check-devin', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT t.id, t.devin_org_id, t.devin_api_key, e.start_at, t.created_at
+       FROM teams t JOIN events e ON e.id = t.event_id
+      WHERE t.id = $1 AND e.slug = $2`,
+    [req.params.teamId, req.params.slug]
+  );
+  const t = rows[0];
+  if (!t) return res.status(404).json({ error: 'no such team' });
+  if (!t.devin_org_id || !t.devin_api_key) return res.json({ status: 'not_set' });
+  try {
+    const m = await fetchTeamMetrics(t.devin_api_key, t.devin_org_id, t.start_at || t.created_at);
+    await pool.query(
+      `UPDATE teams SET devin_sessions = $1, devin_active = $2, devin_msgs = $3,
+              devin_prs_open = $4, devin_prs_merged = $5, devin_acus = $6,
+              devin_checked_at = now(), devin_status = 'connected'
+        WHERE id = $7`,
+      [m.sessions, m.active, m.msgs, m.prsOpen, m.prsMerged, m.acus, t.id]
+    );
+    res.json({ status: 'connected', ...m });
+  } catch (err) {
+    console.error('devin check failed for team', t.id, err.message);
+    await pool.query("UPDATE teams SET devin_status = 'error' WHERE id = $1", [t.id]);
+    res.json({ status: 'error' });
+  }
 });
 
 export default router;

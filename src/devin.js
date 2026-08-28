@@ -1,146 +1,141 @@
 import { pool } from './db.js';
 
-// OPTIONAL, BRAGGING RIGHTS ONLY. Devin numbers never touch the score — they
-// are a side-stat on the board ("how hard did you drive your agent?").
-//
-// Wiring, once Cognition provisions an org for the event:
-//   DEVIN_API_KEY  service-user key with the ViewOrgSessions permission
-//                  (a personal access token works too, but then you only see
-//                  your own sessions — useless for a field of teams)
-//   DEVIN_ORG_ID   the org- prefixed id; your Devin admin has it
-// Without both, this module does nothing at all: no requests, no columns
-// populated, nothing rendered. The race does not depend on it.
-//
-// Mapping sessions to teams: a team optionally registers the email of the
-// Devin account it works in. We resolve email -> user_id once against the org
-// member list, then group the org's sessions in the event window by user_id.
-// That is ONE sessions request per poll for the whole field, not one per team.
+const DEVIN_API = process.env.DEVIN_API_BASE ?? 'https://api.devin.ai';
+const ACTIVE_STATUSES = new Set(['running', 'claimed', 'resuming', 'new']);
 
-// DEVIN_API_BASE exists so the poller can be pointed at a stub in tests.
-const BASE = process.env.DEVIN_API_BASE || 'https://api.devin.ai';
-
-export function devinConfigured() {
-  return !!(process.env.DEVIN_API_KEY && process.env.DEVIN_ORG_ID);
-}
-
-function headers() {
-  return {
-    Authorization: `Bearer ${process.env.DEVIN_API_KEY}`,
-    'Content-Type': 'application/json',
-  };
-}
-
-async function get(path, params) {
-  const url = new URL(path, BASE);
-  for (const [k, v] of Object.entries(params || {})) {
-    if (v !== undefined && v !== null) url.searchParams.set(k, v);
-  }
-  const res = await fetch(url, { headers: headers() });
+async function devinFetch(apiKey, path) {
+  const res = await fetch(`${DEVIN_API}${path}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
   if (!res.ok) {
-    console.error(`devin ${path}: ${res.status} ${(await res.text()).slice(0, 160)}`);
-    return null;
+    throw new Error(`Devin API ${path.split('?')[0]} -> ${res.status} ${(await res.text()).slice(0, 200)}`);
   }
   return res.json();
 }
 
-// email -> user_id for the org's members. Cached for the process: people are
-// added to the org before the race, not during it.
-let memberCache = null;
-export async function orgMembers() {
-  if (memberCache) return memberCache;
-  const org = process.env.DEVIN_ORG_ID;
-  const body = await get(`/v3/organizations/${org}/members`);
-  const rows = body?.items || body?.members || (Array.isArray(body) ? body : []);
-  const map = new Map();
-  for (const m of rows) {
-    const email = (m.email || m.user_email || '').trim().toLowerCase();
-    const id = m.user_id || m.id;
-    if (email && id) map.set(email, id);
-  }
-  if (map.size) memberCache = map;
-  return map;
+export async function fetchSelf(apiKey) {
+  return devinFetch(apiKey, '/v3/self');
 }
 
-// Every session in the org created inside the event window, paginated.
-// created_after/created_before are seconds-epoch per the insights schema.
-export async function sessionsInWindow(startMs, endMs) {
-  const org = process.env.DEVIN_ORG_ID;
-  const out = [];
+export async function listSessions(apiKey, orgId, sinceDate) {
+  const sessions = [];
+  let after = null;
+  const createdAfter = Math.floor(sinceDate.getTime() / 1000);
+  for (let page = 0; page < 10; page++) {
+    const params = new URLSearchParams({
+      first: '100',
+      created_after: String(createdAfter),
+    });
+    if (after) params.set('after', after);
+    const data = await devinFetch(
+      apiKey,
+      `/v3/organizations/${encodeURIComponent(orgId)}/sessions?${params}`
+    );
+    sessions.push(...(data.items ?? []));
+    if (!data.has_next_page || !data.end_cursor) break;
+    after = data.end_cursor;
+  }
+  return sessions;
+}
+
+export async function countMessages(apiKey, orgId, sessionId) {
+  let count = 0;
   let after = null;
   for (let page = 0; page < 20; page++) {
-    // `qs` is the SessionsQueryParams object; send it JSON-encoded.
-    const qs = {
-      first: 100,
-      created_after: Math.floor(startMs / 1000),
-      ...(endMs ? { created_before: Math.floor(endMs / 1000) } : {}),
-      ...(after ? { after } : {}),
-    };
-    const body = await get(`/v3/organizations/${org}/sessions/insights`, { qs: JSON.stringify(qs) });
-    if (!body) return out; // network/auth failure: keep whatever we have
-    out.push(...(body.items || []));
-    if (!body.has_next_page || !body.end_cursor) break;
-    after = body.end_cursor;
+    const params = new URLSearchParams({ first: '200' });
+    if (after) params.set('after', after);
+    const data = await devinFetch(
+      apiKey,
+      `/v3/organizations/${encodeURIComponent(orgId)}/sessions/${encodeURIComponent(sessionId)}/messages?${params}`
+    );
+    if (page === 0 && typeof data.total === 'number') return data.total;
+    count += data.items?.length ?? 0;
+    if (!data.has_next_page || !data.end_cursor) break;
+    after = data.end_cursor;
   }
-  return out;
+  return count;
 }
 
-// Fold the org's sessions onto the teams that registered a Devin email.
-export async function pollDevinOnce() {
-  if (!devinConfigured()) return;
-  const { rows: events } = await pool.query(
-    `SELECT id, start_at, end_at FROM events
-      WHERE start_at IS NOT NULL AND (end_at IS NULL OR end_at > now() - interval '2 hours')`
+export function isActive(status) {
+  return ACTIVE_STATUSES.has(String(status ?? '').toLowerCase());
+}
+
+export function aggregateSessions(sessions) {
+  let active = 0;
+  let prsOpen = 0;
+  let prsMerged = 0;
+  let acus = 0;
+  for (const session of sessions) {
+    if (isActive(session.status)) active++;
+    acus += Number(session.acus_consumed || 0);
+    for (const pr of session.pull_requests ?? []) {
+      prsOpen++;
+      if (pr.pr_state === 'merged') prsMerged++;
+    }
+  }
+  return {
+    sessions: sessions.length,
+    active,
+    prsOpen,
+    prsMerged,
+    acus: Number(acus.toFixed(1)),
+  };
+}
+
+export async function fetchTeamMetrics(apiKey, orgId, sinceDate) {
+  const sessions = await listSessions(apiKey, orgId, sinceDate);
+  let msgs = 0;
+  const CONCURRENCY = 5;
+  for (let i = 0; i < sessions.length; i += CONCURRENCY) {
+    const batch = sessions.slice(i, i + CONCURRENCY);
+    const counts = await Promise.allSettled(
+      batch.map((session) => countMessages(apiKey, orgId, session.session_id))
+    );
+    counts.forEach((result) => {
+      if (result.status === 'fulfilled') msgs += result.value;
+    });
+  }
+  return { ...aggregateSessions(sessions), msgs };
+}
+
+export async function pollOnce() {
+  const { rows } = await pool.query(
+    `SELECT t.id, t.devin_org_id, t.devin_api_key, t.created_at AS team_created_at,
+            e.start_at, e.end_at
+       FROM teams t JOIN events e ON e.id = t.event_id
+      WHERE t.devin_org_id IS NOT NULL AND t.devin_org_id <> ''
+        AND t.devin_api_key IS NOT NULL AND t.devin_api_key <> ''
+        AND (e.end_at IS NULL OR e.end_at > now() - interval '1 hour')`
   );
-  if (!events.length) return;
-
-  for (const event of events) {
-    const teams = await pool.query(
-      "SELECT id, devin_email FROM teams WHERE event_id = $1 AND devin_email IS NOT NULL AND devin_email <> ''",
-      [event.id]
-    );
-    if (!teams.rows.length) continue;
-
-    const members = await orgMembers();
-    const sessions = await sessionsInWindow(
-      new Date(event.start_at).getTime(),
-      event.end_at ? new Date(event.end_at).getTime() : null
-    );
-    if (!sessions.length) continue;
-
-    // user_id -> totals
-    const byUser = new Map();
-    for (const s of sessions) {
-      const key = s.user_id || s.service_user_id;
-      if (!key) continue;
-      const t = byUser.get(key) || { sessions: 0, messages: 0, acus: 0 };
-      t.sessions += 1;
-      // "chats sent" = what the humans typed at it
-      t.messages += Number(s.num_user_messages) || 0;
-      t.acus += Number(s.acus_consumed) || 0;
-      byUser.set(key, t);
-    }
-
-    for (const team of teams.rows) {
-      const userId = members.get(team.devin_email.trim().toLowerCase());
-      const t = (userId && byUser.get(userId)) || { sessions: 0, messages: 0, acus: 0 };
+  for (const t of rows) {
+    try {
+      const since = t.start_at || t.team_created_at;
+      const metrics = await fetchTeamMetrics(t.devin_api_key, t.devin_org_id, since);
       await pool.query(
-        `UPDATE teams SET devin_sessions = $1, devin_messages = $2, devin_acus = $3,
-                          devin_checked_at = now()
-          WHERE id = $4`,
-        [t.sessions, t.messages, +t.acus.toFixed(2), team.id]
+        `UPDATE teams SET devin_sessions = $1, devin_active = $2, devin_msgs = $3,
+                devin_prs_open = $4, devin_prs_merged = $5, devin_acus = $6,
+                devin_checked_at = now(), devin_status = 'connected'
+          WHERE id = $7`,
+        [
+          metrics.sessions,
+          metrics.active,
+          metrics.msgs,
+          metrics.prsOpen,
+          metrics.prsMerged,
+          metrics.acus,
+          t.id,
+        ]
       );
+    } catch (err) {
+      console.error('devin poll failed for team', t.id, err.message);
+      await pool.query("UPDATE teams SET devin_status = 'error' WHERE id = $1", [t.id]);
     }
   }
 }
 
-// Same 5-minute cadence as the GitHub poller. Failures are logged and skipped;
-// a Devin outage must never take the board down.
 export function startDevinPoller() {
-  if (!devinConfigured()) {
-    console.log('devin: not configured (set DEVIN_API_KEY + DEVIN_ORG_ID to enable) — skipping');
-    return;
-  }
-  const tick = () => pollDevinOnce().catch((err) => console.error('devin poll failed:', err.message));
-  setTimeout(tick, 10_000);
-  setInterval(tick, 5 * 60_000);
+  const intervalMs = 60_000;
+  pollOnce().catch((e) => console.error('devin poll', e.message));
+  setInterval(() => pollOnce().catch((e) => console.error('devin poll', e.message)), intervalMs);
+  console.log(`devin poller every ${intervalMs / 1000}s`);
 }

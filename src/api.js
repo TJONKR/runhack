@@ -2,6 +2,7 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import { pool, eventConfig, eventStatus, teamScore } from './db.js';
 import { parseRepo } from './github.js';
+import { fetchSelf } from './devin.js';
 
 const router = Router();
 
@@ -61,6 +62,7 @@ router.get('/:slug/info', async (req, res) => {
   const config = eventConfig(rows[0]);
   const teams = await pool.query(
     `SELECT t.id, t.name, (t.repo_url IS NOT NULL AND t.repo_url <> '') AS has_repo,
+            (t.devin_api_key IS NOT NULL AND t.devin_api_key <> '') AS has_devin,
             (SELECT count(*)::int FROM members m WHERE m.team_id = t.id) AS members
        FROM teams t WHERE t.event_id = $1 ORDER BY t.name`,
     [rows[0].id]
@@ -88,16 +90,24 @@ router.post('/:slug/teams', publicWriteLimit, async (req, res) => {
   // spam backstop, far above any real field size — admins can always add more
   const count = await pool.query('SELECT count(*)::int AS n FROM teams WHERE event_id = $1', [event.id]);
   if (count.rows[0].n >= 100) return res.status(403).json({ error: 'team limit reached — talk to the crew' });
-  // Optional: the Devin account the team works in. Bragging stats only —
-  // never scored, and ignored entirely unless the server has Devin creds.
-  const devinEmail = String(req.body.devinEmail || '').trim().toLowerCase();
-  if (devinEmail && (devinEmail.length > 120 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(devinEmail))) {
-    return res.status(400).json({ error: 'devinEmail must be an email address' });
+  // Optional: an event-day Devin service-user key. Purely a side-stat —
+  // never scored, and leaving it blank costs a team nothing. Validated
+  // against /v3/self up front so a typo is caught here, not silently at
+  // 3am in the poller.
+  const devinKey = typeof req.body.devinKey === 'string' ? req.body.devinKey.trim() : '';
+  let devinOrgId = null;
+  if (devinKey) {
+    if (devinKey.length > 200) return res.status(400).json({ error: 'that does not look like a Devin key' });
+    try {
+      devinOrgId = (await fetchSelf(devinKey)).org_id;
+    } catch {
+      return res.status(400).json({ error: 'Devin rejected that key — check it, or leave the field empty' });
+    }
   }
   const team = await pool.query(
-    `INSERT INTO teams (event_id, name, devin_email) VALUES ($1, $2, $3)
+    `INSERT INTO teams (event_id, name, devin_org_id, devin_api_key) VALUES ($1, $2, $3, $4)
      ON CONFLICT (event_id, name) DO NOTHING RETURNING id, name`,
-    [event.id, name, devinEmail || null]
+    [event.id, name, devinOrgId, devinKey || null]
   );
   if (!team.rows[0]) return res.status(409).json({ error: 'that team name is taken' });
   res.json({ teamId: team.rows[0].id, name: team.rows[0].name });
@@ -205,7 +215,8 @@ router.get('/:slug/team/:teamId', async (req, res) => {
   const t = await pool.query(
     `SELECT id, name, repo_url, repo_status, commit_count, commit_override, score_adjust, active_device_id,
             last_commit_msg, last_commit_author, last_commit_at, committers,
-            devin_sessions, devin_messages
+            devin_sessions, devin_active, devin_msgs, devin_prs_open,
+            devin_prs_merged, devin_acus, devin_checked_at
        FROM teams WHERE id = $1 AND event_id = $2`,
     [req.params.teamId, event.id]
   );
@@ -253,7 +264,16 @@ router.get('/:slug/team/:teamId', async (req, res) => {
     repo: team.repo_url || null,
     commits,
     committers: team.committers ?? null,
-    devin: team.devin_sessions ? { sessions: team.devin_sessions, messages: team.devin_messages } : null,
+    devin: team.devin_checked_at
+      ? {
+          sessions: Number(team.devin_sessions),
+          active: Number(team.devin_active),
+          msgs: Number(team.devin_msgs),
+          prsOpen: Number(team.devin_prs_open),
+          prsMerged: Number(team.devin_prs_merged),
+          acus: Number(team.devin_acus),
+        }
+      : null,
     lastCommit: team.last_commit_msg
       ? {
           message: team.last_commit_msg,
@@ -321,7 +341,8 @@ router.get('/:slug/board', async (req, res) => {
   const teams = await pool.query(
     `SELECT t.id, t.name, t.repo_url, t.commit_count, t.commit_override, t.score_adjust,
             t.last_commit_msg, t.last_commit_author, t.last_commit_at, t.committers,
-            t.devin_sessions, t.devin_messages,
+            t.devin_sessions, t.devin_active, t.devin_msgs, t.devin_prs_open,
+            t.devin_prs_merged, t.devin_acus, t.devin_checked_at,
             (SELECT count(*)::int FROM members m WHERE m.team_id = t.id) AS runner_count,
             l.best_s AS best_lap_s,
             COALESCE(dm.name, ad.name, CASE WHEN ad.id IS NULL THEN NULL ELSE 'Team device' END) AS runner_name,
@@ -382,7 +403,16 @@ router.get('/:slug/board', async (req, res) => {
         repo: t.repo_url || null,
         committers: t.committers ?? null,
         // side-stat, never scored; null when the team didn't opt in
-        devin: t.devin_sessions ? { sessions: t.devin_sessions, messages: t.devin_messages } : null,
+        devin: t.devin_checked_at
+          ? {
+              sessions: Number(t.devin_sessions),
+              active: Number(t.devin_active),
+              msgs: Number(t.devin_msgs),
+              prsOpen: Number(t.devin_prs_open),
+              prsMerged: Number(t.devin_prs_merged),
+              acus: Number(t.devin_acus),
+            }
+          : null,
         lastCommit: t.last_commit_msg
           ? {
               message: t.last_commit_msg,

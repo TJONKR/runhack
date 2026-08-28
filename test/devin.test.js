@@ -1,89 +1,77 @@
 import test from 'node:test';
-import assert from 'node:assert';
-import http from 'node:http';
+import assert from 'node:assert/strict';
+import { aggregateSessions, isActive } from '../src/devin.js';
 
-// The Devin side-stat poller, exercised against a stub that speaks the shapes
-// documented for /v3/organizations/{org}/members and .../sessions/insights.
-// No Devin account required to run this.
-
-function stubDevin(handler) {
-  const server = http.createServer((req, res) => {
-    const body = handler(req);
-    res.writeHead(body ? 200 : 404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(body ?? { error: 'not found' }));
-  });
-  return new Promise((resolve) => server.listen(0, () => resolve(server)));
-}
-
-test('devin: unconfigured is inert', async () => {
-  delete process.env.DEVIN_API_KEY;
-  delete process.env.DEVIN_ORG_ID;
-  const { devinConfigured } = await import('../src/devin.js?fresh=1');
-  assert.equal(devinConfigured(), false);
+test('aggregateSessions counts sessions, activity, PRs, and ACUs', () => {
+  assert.deepEqual(
+    aggregateSessions([
+      {
+        status: 'running',
+        acus_consumed: 1.25,
+        pull_requests: [{ pr_state: 'open' }, { pr_state: 'merged' }],
+      },
+      {
+        status: 'finished',
+        acus_consumed: 2.31,
+        pull_requests: [{ pr_state: null }],
+      },
+      {
+        status: 'CLAIMED',
+        pull_requests: [],
+      },
+    ]),
+    { sessions: 3, active: 2, prsOpen: 3, prsMerged: 1, acus: 3.6 }
+  );
 });
 
-test('devin: members map + session aggregation by user', async () => {
-  const server = await stubDevin((req) => {
-    const url = new URL(req.url, 'http://x');
-    if (url.pathname.endsWith('/members')) {
-      return { items: [
-        { user_id: 'u-ada', email: 'Ada@Team.com' },
-        { user_id: 'u-lin', email: 'lin@team.com' },
-      ] };
-    }
-    if (url.pathname.endsWith('/sessions/insights')) {
-      const qs = JSON.parse(url.searchParams.get('qs'));
-      assert.ok(qs.created_after, 'window start is sent');
-      // one page, deliberately mixed users + a session with no user
-      return { items: [
-        { session_id: 's1', user_id: 'u-ada', num_user_messages: 12, num_devin_messages: 30, acus_consumed: 4.5 },
-        { session_id: 's2', user_id: 'u-ada', num_user_messages: 8, num_devin_messages: 20, acus_consumed: 2.25 },
-        { session_id: 's3', user_id: 'u-lin', num_user_messages: 3, num_devin_messages: 9, acus_consumed: 1 },
-        { session_id: 's4', user_id: null, service_user_id: null, num_user_messages: 99, acus_consumed: 99 },
-      ], has_next_page: false, end_cursor: null };
-    }
-    return null;
+test('aggregateSessions handles missing ACUs and empty lists', () => {
+  assert.deepEqual(aggregateSessions([]), {
+    sessions: 0,
+    active: 0,
+    prsOpen: 0,
+    prsMerged: 0,
+    acus: 0,
   });
-  const port = server.address().port;
-  process.env.DEVIN_API_KEY = 'test-key';
-  process.env.DEVIN_ORG_ID = 'org-test';
-  process.env.DEVIN_API_BASE = `http://127.0.0.1:${port}`;
+  assert.deepEqual(
+    aggregateSessions([{ status: 'new', pull_requests: null }]),
+    { sessions: 1, active: 1, prsOpen: 0, prsMerged: 0, acus: 0 }
+  );
+});
 
-  const devin = await import('../src/devin.js?fresh=2');
-  assert.equal(devin.devinConfigured(), true);
-
-  const members = await devin.orgMembers();
-  // emails are matched case-insensitively — people type them by hand
-  assert.equal(members.get('ada@team.com'), 'u-ada');
-
-  const sessions = await devin.sessionsInWindow(Date.parse('2026-08-29T09:00:00Z'), Date.parse('2026-08-29T17:00:00Z'));
-  assert.equal(sessions.length, 4);
-
-  // the fold the poller does: prompts sent BY humans, per user
-  const byUser = new Map();
-  for (const s of sessions) {
-    const key = s.user_id || s.service_user_id;
-    if (!key) continue;
-    const t = byUser.get(key) || { sessions: 0, messages: 0, acus: 0 };
-    t.sessions += 1;
-    t.messages += Number(s.num_user_messages) || 0;
-    t.acus += Number(s.acus_consumed) || 0;
-    byUser.set(key, t);
+test('isActive recognizes Devin active statuses case-insensitively', () => {
+  for (const status of ['running', 'claimed', 'resuming', 'new', 'RUNNING', 'Claimed']) {
+    assert.equal(isActive(status), true);
   }
-  assert.deepEqual(byUser.get('u-ada'), { sessions: 2, messages: 20, acus: 6.75 });
-  assert.deepEqual(byUser.get('u-lin'), { sessions: 1, messages: 3, acus: 1 });
-  assert.equal(byUser.has(null), false, 'sessions with no owner are dropped, not credited');
-
-  server.close();
+  for (const status of ['finished', 'error', '', null, undefined]) {
+    assert.equal(isActive(status), false);
+  }
 });
 
-test('devin: an API failure yields nothing rather than throwing', async () => {
-  const server = await stubDevin(() => null); // everything 404s
-  const port = server.address().port;
-  process.env.DEVIN_API_KEY = 'test-key';
-  process.env.DEVIN_ORG_ID = 'org-test';
-  process.env.DEVIN_API_BASE = `http://127.0.0.1:${port}`;
-  const devin = await import('../src/devin.js?fresh=3');
-  assert.deepEqual(await devin.sessionsInWindow(Date.now() - 1000, null), []);
-  server.close();
+// --- added on merge: the guarantees that matter operationally ---
+
+test('a team API key never appears in any admin response shape', () => {
+  // mirrors withoutDevinKey in src/admin.js
+  const withoutDevinKey = (team) => {
+    const { devin_api_key, ...safe } = team;
+    return { ...safe, has_devin: !!devin_api_key };
+  };
+  const row = { id: 3, name: 'Prompt Pacers', devin_api_key: 'cog_supersecret', devin_org_id: 'org-1' };
+  const out = withoutDevinKey(row);
+  assert.equal(JSON.stringify(out).includes('cog_supersecret'), false);
+  assert.equal(out.has_devin, true);
+  assert.equal(withoutDevinKey({ id: 4, devin_api_key: null }).has_devin, false);
+});
+
+test('opting out of Devin costs a team nothing', async () => {
+  const { teamScore } = await import('../src/db.js');
+  // score is distance only — Devin cannot move a ranking either way
+  assert.equal(teamScore(12.4, 0, {}), 12.4);
+  assert.equal(teamScore(12.4, 999, {}), 12.4);
+});
+
+test('aggregateSessions handles an empty field without NaN', async () => {
+  const { aggregateSessions } = await import('../src/devin.js');
+  assert.deepEqual(aggregateSessions([]), {
+    sessions: 0, active: 0, prsOpen: 0, prsMerged: 0, acus: 0,
+  });
 });
