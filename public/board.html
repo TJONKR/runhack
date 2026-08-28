@@ -285,7 +285,7 @@ async function tick() {
           ? `<span class="commitline devinline">◆ ${t.devin.msgs} prompts · ${t.devin.sessions} ${
               t.devin.sessions === 1 ? 'session' : 'sessions'
             }${t.devin.active ? `<b class="devinlive">${t.devin.active} running</b>` : ''}${
-              t.devin.prsOpen ? ` · ${t.devin.prsMerged}/${t.devin.prsOpen} PRs merged` : ''
+              t.devin.prsOpen ? ` · ${t.devin.prsOpen} PR${t.devin.prsOpen === 1 ? '' : 's'}` : ''
             }${t.devin.acus ? ` · ${t.devin.acus} ACU` : ''}</span>`
           : '';
       const live = t.status === 'running';

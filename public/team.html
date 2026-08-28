@@ -177,10 +177,10 @@ async function tick() {
         `${t.devin.sessions} ${t.devin.sessions === 1 ? 'session' : 'sessions'}` +
         (t.devin.active ? ` · ${t.devin.active} running` : '');
       const da = document.getElementById('devinAcuStat');
-      da.style.display = '';
+      da.style.display = t.devin.acus ? '' : 'none';
       document.getElementById('devinAcus').textContent = t.devin.acus;
       document.getElementById('devinPrs').textContent =
-        t.devin.prsOpen ? `${t.devin.prsMerged}/${t.devin.prsOpen} PRs merged` : '';
+        t.devin.prsOpen ? `${t.devin.prsOpen} PR${t.devin.prsOpen === 1 ? '' : 's'} opened` : '';
     } else {
       dv.style.display = 'none';
       document.getElementById('devinAcuStat').style.display = 'none';

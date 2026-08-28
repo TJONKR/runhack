@@ -2,7 +2,7 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import { pool, eventConfig, eventStatus, teamScore } from './db.js';
 import { parseRepo } from './github.js';
-import { fetchSelf } from './devin.js';
+import { verifyKey } from './devin.js';
 
 const router = Router();
 
@@ -95,19 +95,18 @@ router.post('/:slug/teams', publicWriteLimit, async (req, res) => {
   // against /v3/self up front so a typo is caught here, not silently at
   // 3am in the poller.
   const devinKey = typeof req.body.devinKey === 'string' ? req.body.devinKey.trim() : '';
-  let devinOrgId = null;
   if (devinKey) {
-    if (devinKey.length > 200) return res.status(400).json({ error: 'that does not look like a Devin key' });
+    if (devinKey.length > 300) return res.status(400).json({ error: 'that does not look like a Devin key' });
     try {
-      devinOrgId = (await fetchSelf(devinKey)).org_id;
+      await verifyKey(devinKey);
     } catch {
       return res.status(400).json({ error: 'Devin rejected that key — check it, or leave the field empty' });
     }
   }
   const team = await pool.query(
-    `INSERT INTO teams (event_id, name, devin_org_id, devin_api_key) VALUES ($1, $2, $3, $4)
+    `INSERT INTO teams (event_id, name, devin_api_key) VALUES ($1, $2, $3)
      ON CONFLICT (event_id, name) DO NOTHING RETURNING id, name`,
-    [event.id, name, devinOrgId, devinKey || null]
+    [event.id, name, devinKey || null]
   );
   if (!team.rows[0]) return res.status(409).json({ error: 'that team name is taken' });
   res.json({ teamId: team.rows[0].id, name: team.rows[0].name });

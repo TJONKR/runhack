@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { pool } from './db.js';
 import { countCommits, pollOnce } from './github.js';
-import { fetchSelf, fetchTeamMetrics } from './devin.js';
+import { verifyKey, fetchTeamMetrics } from './devin.js';
 import { readIngestLog, clearIngestLog } from './ingestLog.js';
 
 const router = Router();
@@ -576,19 +576,18 @@ router.post('/events/:slug/teams/:teamId/devin', async (req, res) => {
   const event = await pool.query('SELECT id FROM events WHERE slug = $1', [req.params.slug]);
   if (!event.rows[0]) return res.status(404).json({ error: 'no such event' });
   const apiKey = req.body.apiKey?.toString().trim() || null;
-  let orgId = req.body.orgId?.toString().trim() || null;
-  if (apiKey && !orgId) {
+  if (apiKey) {
     try {
-      orgId = (await fetchSelf(apiKey)).org_id;
+      await verifyKey(apiKey);
     } catch {
       return res.status(400).json({ ok: false, error: 'Devin rejected that key' });
     }
   }
   const { rows } = await pool.query(
-    `UPDATE teams SET devin_org_id = $1, devin_api_key = $2, devin_status = NULL
-      WHERE id = $3 AND event_id = $4
+    `UPDATE teams SET devin_api_key = $1, devin_status = NULL
+      WHERE id = $2 AND event_id = $3
       RETURNING devin_api_key`,
-    [orgId, apiKey, req.params.teamId, event.rows[0].id]
+    [apiKey, req.params.teamId, event.rows[0].id]
   );
   if (!rows[0]) return res.status(404).json({ error: 'no such team' });
   res.json({ ok: true, hasKey: !!rows[0].devin_api_key });
@@ -597,16 +596,20 @@ router.post('/events/:slug/teams/:teamId/devin', async (req, res) => {
 // Test a team's Devin connection now and persist what comes back.
 router.post('/events/:slug/teams/:teamId/check-devin', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT t.id, t.devin_org_id, t.devin_api_key, e.start_at, t.created_at
+    `SELECT t.id, t.devin_api_key, e.start_at, e.end_at, t.created_at
        FROM teams t JOIN events e ON e.id = t.event_id
       WHERE t.id = $1 AND e.slug = $2`,
     [req.params.teamId, req.params.slug]
   );
   const t = rows[0];
   if (!t) return res.status(404).json({ error: 'no such team' });
-  if (!t.devin_org_id || !t.devin_api_key) return res.json({ status: 'not_set' });
+  if (!t.devin_api_key) return res.json({ status: 'not_set' });
   try {
-    const m = await fetchTeamMetrics(t.devin_api_key, t.devin_org_id, t.start_at || t.created_at);
+    const m = await fetchTeamMetrics(
+      t.devin_api_key,
+      new Date(t.start_at || t.created_at).getTime(),
+      t.end_at ? new Date(t.end_at).getTime() : null
+    );
     await pool.query(
       `UPDATE teams SET devin_sessions = $1, devin_active = $2, devin_msgs = $3,
               devin_prs_open = $4, devin_prs_merged = $5, devin_acus = $6,
