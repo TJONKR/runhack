@@ -145,6 +145,45 @@ export async function initDb() {
   }
 }
 
+// Midnight-to-midnight around `at`, in an IANA timezone, DST included.
+// Intl gives us the wall-clock reading in that zone; the difference against
+// the same reading as UTC is the offset at that instant.
+export function tzOffsetMs(at, tz) {
+  const f = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const p = Object.fromEntries(
+    f.formatToParts(at).filter((x) => x.type !== 'literal').map((x) => [x.type, Number(x.value)])
+  );
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second) - at.getTime();
+}
+
+export function localDayBounds(at, tz) {
+  const date = at instanceof Date ? at : new Date(at);
+  const f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const [y, m, d] = f.format(date).split('-').map(Number);
+  // First guess assumes the offset at `at` holds at midnight, then correct
+  // once — enough for every real zone, including a DST switch inside the day.
+  const guess = Date.UTC(y, m - 1, d) - tzOffsetMs(date, tz);
+  const startMs = Date.UTC(y, m - 1, d) - tzOffsetMs(new Date(guess), tz);
+  const guessEnd = Date.UTC(y, m - 1, d + 1) - tzOffsetMs(date, tz);
+  const endMs = Date.UTC(y, m - 1, d + 1) - tzOffsetMs(new Date(guessEnd), tz);
+  return { startMs, endMs };
+}
+
+/** The window Devin activity is measured over: the calendar day of the race
+ *  by default, the event window itself when devinWholeDay is off. */
+export function devinWindow(event, config) {
+  const anchor = event.start_at ? new Date(event.start_at) : new Date(event.created_at ?? Date.now());
+  if (config.devinWholeDay) return localDayBounds(anchor, config.devinTz);
+  return {
+    startMs: event.start_at ? new Date(event.start_at).getTime() : null,
+    endMs: event.end_at ? new Date(event.end_at).getTime() : null,
+  };
+}
+
 export function eventStatus(event, now = Date.now()) {
   const start = event.start_at ? new Date(event.start_at).getTime() : null;
   const end = event.end_at ? new Date(event.end_at).getTime() : null;
@@ -197,6 +236,12 @@ export function eventConfig(event) {
     commitCap: c.commitCap ?? null,
     minTeamSize: c.minTeamSize ?? 3, // event rule: teams of 3/4
     maxTeamSize: c.maxTeamSize ?? 4,
+    // Devin stats span the whole calendar day of the race, not just the
+    // race window — teams prep before the gun and keep going after it, and
+    // this is a side-stat, not a scored one. Deliberately NOT the event
+    // window: those times govern lap validity and the countdown clock.
+    devinWholeDay: c.devinWholeDay ?? true,
+    devinTz: c.devinTz ?? 'Europe/London',
     gate: c.gate ?? null, // [[lat,lng],[lat,lng]] timing line inside the start box
     // Which timing scores laps: 'exit_entry' (box timing, window over the
     // timed segment), 'gate' or 'entry_entry' (full lap, window over lapM).

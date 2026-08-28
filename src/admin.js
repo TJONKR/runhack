@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { pool } from './db.js';
+import { pool, eventConfig, devinWindow } from './db.js';
 import { countCommits, pollOnce } from './github.js';
 import { verifyKey, fetchTeamMetrics } from './devin.js';
 import { readIngestLog, clearIngestLog } from './ingestLog.js';
@@ -596,7 +596,8 @@ router.post('/events/:slug/teams/:teamId/devin', async (req, res) => {
 // Test a team's Devin connection now and persist what comes back.
 router.post('/events/:slug/teams/:teamId/check-devin', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT t.id, t.devin_api_key, e.start_at, e.end_at, t.created_at
+    `SELECT t.id, t.devin_api_key, e.start_at, e.end_at, e.config,
+            e.created_at AS event_created_at, t.created_at
        FROM teams t JOIN events e ON e.id = t.event_id
       WHERE t.id = $1 AND e.slug = $2`,
     [req.params.teamId, req.params.slug]
@@ -605,11 +606,11 @@ router.post('/events/:slug/teams/:teamId/check-devin', async (req, res) => {
   if (!t) return res.status(404).json({ error: 'no such team' });
   if (!t.devin_api_key) return res.json({ status: 'not_set' });
   try {
-    const m = await fetchTeamMetrics(
-      t.devin_api_key,
-      new Date(t.start_at || t.created_at).getTime(),
-      t.end_at ? new Date(t.end_at).getTime() : null
+    const { startMs, endMs } = devinWindow(
+      { start_at: t.start_at, end_at: t.end_at, created_at: t.event_created_at || t.created_at },
+      eventConfig({ config: t.config })
     );
+    const m = await fetchTeamMetrics(t.devin_api_key, startMs, endMs);
     await pool.query(
       `UPDATE teams SET devin_sessions = $1, devin_active = $2, devin_msgs = $3,
               devin_prs_open = $4, devin_prs_merged = $5, devin_acus = $6,

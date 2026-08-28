@@ -1,4 +1,4 @@
-import { pool } from './db.js';
+import { pool, eventConfig, devinWindow } from './db.js';
 
 // OPTIONAL, BRAGGING RIGHTS ONLY. Devin numbers never touch the score — they
 // are a side-stat on the board ("how hard did you drive your agent?"), and a
@@ -155,15 +155,19 @@ export async function fetchTeamMetrics(apiKey, startMs, endMs) {
 
 export async function pollOnce() {
   const { rows } = await pool.query(
-    `SELECT t.id, t.devin_api_key, t.created_at AS team_created_at, e.start_at, e.end_at
+    `SELECT t.id, t.devin_api_key, t.created_at AS team_created_at,
+            e.start_at, e.end_at, e.created_at AS event_created_at, e.config
        FROM teams t JOIN events e ON e.id = t.event_id
       WHERE t.devin_api_key IS NOT NULL AND t.devin_api_key <> ''
-        AND (e.end_at IS NULL OR e.end_at > now() - interval '1 hour')`
+        AND (e.end_at IS NULL OR e.end_at > now() - interval '8 hours')`
   );
   for (const t of rows) {
     try {
-      const startMs = new Date(t.start_at || t.team_created_at).getTime();
-      const endMs = t.end_at ? new Date(t.end_at).getTime() : null;
+      // whole race day by default — see devinWindow() in db.js
+      const { startMs, endMs } = devinWindow(
+        { start_at: t.start_at, end_at: t.end_at, created_at: t.event_created_at || t.team_created_at },
+        eventConfig({ config: t.config })
+      );
       const m = await fetchTeamMetrics(t.devin_api_key, startMs, endMs);
       await pool.query(
         `UPDATE teams SET devin_sessions = $1, devin_active = $2, devin_msgs = $3,

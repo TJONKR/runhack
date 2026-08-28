@@ -110,3 +110,28 @@ test('opting out of Devin costs a team nothing', async () => {
   assert.equal(teamScore(12.4, 0, {}), 12.4);
   assert.equal(teamScore(12.4, 999, {}), 12.4);
 });
+
+test('the Devin window is the whole race day in the event timezone', async () => {
+  const { devinWindow, localDayBounds } = await import('../src/db.js');
+  const { eventConfig } = await import('../src/db.js');
+  const event = { start_at: '2026-08-29T09:00:00Z' };
+
+  // default: whole calendar day, London (BST = UTC+1 in August)
+  const day = devinWindow(event, eventConfig({ config: {} }));
+  assert.equal(new Date(day.startMs).toISOString(), '2026-08-28T23:00:00.000Z');
+  assert.equal(new Date(day.endMs).toISOString(), '2026-08-29T23:00:00.000Z');
+
+  // opting out falls back to the race window itself
+  const race = devinWindow({ ...event, end_at: '2026-08-29T17:00:00Z' },
+    eventConfig({ config: { devinWholeDay: false } }));
+  assert.equal(new Date(race.startMs).toISOString(), '2026-08-29T09:00:00.000Z');
+  assert.equal(new Date(race.endMs).toISOString(), '2026-08-29T17:00:00.000Z');
+
+  // a winter date in the same zone is UTC+0 — proves DST isn't hard-coded
+  const winter = localDayBounds(new Date('2026-01-15T12:00:00Z'), 'Europe/London');
+  assert.equal(new Date(winter.startMs).toISOString(), '2026-01-15T00:00:00.000Z');
+
+  // and a zone the other side of UTC behaves too
+  const ny = localDayBounds(new Date('2026-08-29T12:00:00Z'), 'America/New_York');
+  assert.equal(new Date(ny.startMs).toISOString(), '2026-08-29T04:00:00.000Z');
+});
