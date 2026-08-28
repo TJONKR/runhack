@@ -270,10 +270,12 @@ router.get('/:slug/team/:teamId', async (req, res) => {
       devicesConnected: devices.rows.filter((d) => d.activated_at).length,
       githubConnected: team.repo_status === 'connected',
       repoSet: !!team.repo_url,
+      // GitHub is optional: teams are only held back by it once a repo has
+      // actually been set (admins can still wire one up per team).
       ready:
         members.rows.length >= config.minTeamSize &&
         devices.rows.some((d) => d.activated_at) &&
-        team.repo_status === 'connected',
+        (!team.repo_url || team.repo_status === 'connected'),
     },
     members: members.rows.map((m) => ({
       id: m.id,

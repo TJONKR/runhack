@@ -104,10 +104,6 @@
     </div>
     <label>Your name</label>
     <input id="name" placeholder="runner name" autocomplete="off">
-    <div id="repoWrap" style="display:none">
-      <label>Team GitHub repo (public — commits count toward your score)</label>
-      <input id="repo" placeholder="https://github.com/you/project" autocomplete="off" inputmode="url">
-    </div>
     <button id="goBtn" onclick="register()">Join the team →</button>
     <button class="secondary" onclick="openDeviceStep()">Already joined? Set up tracking on this phone</button>
     <p class="muted">Register once. Tracking is per phone — set it up next, and pass the phone (or
@@ -198,16 +194,6 @@ function setMode(m) {
   document.getElementById('joinFields').style.display = m === 'join' ? '' : 'none';
   document.getElementById('createFields').style.display = m === 'create' ? '' : 'none';
   document.getElementById('goBtn').textContent = m === 'create' ? 'Create team & join →' : 'Join the team →';
-  updateRepoField();
-}
-
-// New team: the creator is its first runner, so the repo field always shows.
-// Existing team: only if nobody has set the repo yet.
-function updateRepoField() {
-  if (!info) return;
-  const team = info.teams.find((t) => String(t.id) === document.getElementById('team').value);
-  const show = mode === 'create' || (team && !team.has_repo);
-  document.getElementById('repoWrap').style.display = show ? 'block' : 'none';
 }
 
 async function init() {
@@ -242,15 +228,12 @@ async function init() {
   }
   // Nothing to join yet (or everything full, and no QR link): start a team.
   if (!preTeam && !open) setMode('create');
-  sel.onchange = updateRepoField;
-  updateRepoField();
 }
 
 // Step 1: register a person (once) — creating the team first if needed.
 async function register() {
   const name = document.getElementById('name').value.trim();
   if (!name) return alert('Enter your name');
-  const repoUrl = document.getElementById('repo').value.trim() || undefined;
   let team = +document.getElementById('team').value;
   if (mode === 'create') {
     const teamName = document.getElementById('teamName').value.trim();
@@ -268,7 +251,7 @@ async function register() {
   try { r = await fetch(`/api/${slug}/members`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ teamId: team, name, repoUrl }),
+    body: JSON.stringify({ teamId: team, name }),
   }); } catch { return alert('No connection — check signal and try again.'); }
   if (!r.ok) return alert('Registration failed: ' + (await r.text()));
   joinedTeamId = team;

@@ -142,19 +142,21 @@ async function tick() {
     const t = await r.json();
     document.getElementById('eventname').textContent = t.event;
     document.getElementById('teamname').textContent = t.team;
-    document.getElementById('repo').textContent = t.repo ? t.repo.replace('https://github.com/', 'github.com/') : 'no repo connected yet';
+    document.getElementById('repo').textContent = t.repo ? t.repo.replace('https://github.com/', 'github.com/') : '';
     const rd = t.readiness;
     if (rd) {
       const el = document.getElementById('ready');
       el.style.display = '';
       el.className = 'ready ' + (rd.ready ? 'ok' : 'no');
       const item = (done, label) => `<span class="item ${done ? 'done' : 'todo'}">${done ? '✓' : '○'} ${label}</span>`;
+      // The github row only appears once a repo is set — it's optional now.
       el.innerHTML = rd.ready
         ? `<b>READY TO RACE</b>` +
-          item(true, `${rd.members} runners`) + item(true, 'device connected') + item(true, 'github connected')
+          item(true, `${rd.members} runners`) + item(true, 'device connected') +
+          (rd.repoSet ? item(true, 'github connected') : '')
         : item(rd.members >= rd.minMembers, `runners ${rd.members}/${rd.minMembers}`) +
           item(rd.devicesConnected >= 1, 'device connected') +
-          item(rd.githubConnected, rd.repoSet ? 'github verified' : 'github repo');
+          (rd.repoSet ? item(rd.githubConnected, 'github verified') : '');
     }
     const pace = (s) => s == null ? '' : `${Math.floor(s / 60)}'${String(Math.round(s % 60)).padStart(2, '0')}"/km`;
     laps.textContent = t.laps; km.textContent = t.km.toFixed(1);
