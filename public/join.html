@@ -50,6 +50,12 @@
   a.storebtn span { display: block; font-family: 'Geist Mono', monospace; font-size: 10px;
                     font-weight: 400; letter-spacing: 0.18em; text-transform: uppercase;
                     color: rgba(244,243,239,0.55); margin-top: 3px; }
+  .step3box { text-align: center; padding: 15px; font-size: 16px; font-weight: 700; border-radius: 8px;
+              margin-top: 22px; color: var(--sky); border: 1px solid rgba(58,144,230,0.55);
+              background: rgba(58,144,230,0.08); }
+  .step3box b { color: var(--paper); }
+  .step3box span { display: block; font-size: 13px; font-weight: 400; color: rgba(244,243,239,0.6);
+                   margin-top: 4px; }
   .step { display: none; }
   .step.active { display: block; }
   .status { text-align: center; padding: 28px 0 8px; font-size: 17px; font-weight: 700; }
@@ -101,8 +107,8 @@
                   text-transform:uppercase;color:var(--sky);margin-bottom:8px">How tracking works</div>
       <ol class="muted" style="margin:0;padding-left:18px;line-height:1.7">
         <li><b>Join</b> — enter your name once, above.</li>
-        <li><b>Connect</b> — we set up the free <b>Traccar</b> app on this phone with one tap
-          (install it first if you don't have it). It streams GPS to the race clock.</li>
+        <li><b>Connect</b> — install the free <b>Traccar</b> app, we configure it with one tap,
+          you flip <b>Continuous tracking</b> on. It streams GPS to the race clock.</li>
         <li><b>Run</b> — background Traccar, open your agent app, go. Laps count automatically
           when you complete the course circuit at running pace.</li>
       </ol>
@@ -131,6 +137,8 @@
     <a class="storebtn" id="storeAndroid" href="https://play.google.com/store/apps/details?id=org.traccar.client"
        target="_blank" rel="noopener">1 · Install Traccar Client <span>free · Google Play</span></a>
     <button onclick="openTraccar()">2 · Open Traccar with our settings</button>
+    <div class="step3box">3 · In Traccar: flip <b>Continuous tracking</b> ON
+      <span>allow location access when it asks — pings start flowing right after</span></div>
     <p class="muted" style="text-align:center;margin-top:10px">Already have Traccar? Skip straight to 2.</p>
     <button class="secondary" onclick="showManual()">Nothing happened?</button>
     <div id="manual" style="display:none">
@@ -141,7 +149,7 @@
          Accuracy: high · Interval: 2s · Distance: 10m</p>
     </div>
     <div class="status" style="font-weight:400;font-size:15px" id="waiting">
-      <span class="spin"></span>Waiting for your first GPS ping…</div>
+      <span class="spin"></span>Waiting for your first GPS ping… is Continuous tracking on?</div>
   </div>
 
   <div class="step" id="step-live">
