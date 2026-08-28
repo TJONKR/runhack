@@ -901,7 +901,7 @@ async function loadRoster() {
     const state = d.is_active ? '<b style="color:var(--ok)">ON BOARD</b>' : d.activated_at ? 'connected' : 'never pinged';
     const batt = d.battery == null ? ''
       : ` · <span style="color:${d.battery <= 20 && !d.charging ? 'var(--orange)' : 'inherit'}">🔋${Math.round(d.battery)}%${d.charging ? '⚡' : ''}</span>`;
-    const traccar = `org.traccar.client://config?url=${encodeURIComponent(location.origin + '/ingest/' + d.token)}&id=${d.token}&accuracy=high&interval=2&distance=10`;
+    const traccar = `org.traccar.client://config?url=${encodeURIComponent(location.origin + '/ingest/' + d.token)}&id=${d.token}&accuracy=high&interval=2&distance=10&wakelock=true&heartbeat=120`;
     return `<div class="card"><div class="row" style="font-size:12px">
       <span style="flex:1;min-width:200px">${d.team} · <b>${label}</b> <span class="muted">#${d.id}</span> · ${state} · ${d.lap_count} laps · ${ping}${batt}</span>
       <button onclick="copyText('${traccar}', this)" title="copy the Traccar config link — open on the phone to (re)connect it">cfg</button>

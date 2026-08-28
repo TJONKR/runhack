@@ -146,7 +146,7 @@
         Set these manually in Traccar and start the service:</p>
       <p class="muted">Server URL: <code id="manualUrl"></code><br>
          Device identifier: <code id="manualId"></code><br>
-         Accuracy: high · Interval: 2s · Distance: 10m</p>
+         Accuracy: high · Interval: 2s · Distance: 10m · Wakelock: on · Heartbeat: 120s</p>
     </div>
     <div class="status" style="font-weight:400;font-size:15px" id="waiting">
       <span class="spin"></span>Waiting for your first GPS ping… is Continuous tracking on?</div>
@@ -301,8 +301,11 @@ async function connectDevice() {
 function ingestUrl() { return `${location.origin}/ingest/${token}`; }
 
 function openTraccar() {
+  // wakelock: survive Android deep sleep over an 8h race; heartbeat: standby
+  // phones keep pinging while stationary so the board's battery/connected
+  // status stays fresh at base.
   const cfg = `org.traccar.client://config?url=${encodeURIComponent(ingestUrl())}` +
-    `&id=${token}&accuracy=high&interval=2&distance=10`;
+    `&id=${token}&accuracy=high&interval=2&distance=10&wakelock=true&heartbeat=120`;
   location.href = cfg;
 }
 function showManual() { document.getElementById('manual').style.display = 'block'; }
