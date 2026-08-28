@@ -20,20 +20,56 @@ for (const p of ['teamId', 'deviceId']) {
   router.param(p, (req, res, next, v) => (/^\d{1,9}$/.test(v) ? next() : res.status(404).json({ error: 'not found' })));
 }
 
-// Light per-IP limit on the public write endpoints (member/device creation,
-// device activation) — enough to stop scripted spam without touching real use.
-const writeBuckets = new Map();
-function publicWriteLimit(req, res, next) {
-  const ip = req.ip || 'unknown';
-  const now = Date.now();
-  let b = writeBuckets.get(ip);
-  if (!b || now - b.start > 60_000) {
-    b = { start: now, count: 0 };
-    writeBuckets.set(ip, b);
-  }
-  if (++b.count > 30) return res.status(429).json({ error: 'slow down' });
-  next();
+// Abuse protection on the public write endpoints.
+//
+// These limits are PER IP, and at a real event that is one IP for the whole
+// field: a venue hands out WiFi behind a single NAT address, so 100 runners
+// look like one very busy client. The previous 30/min blocked registration
+// after about a dozen people — every runner costs 2 writes (member + device)
+// and every team lead a third. A 100-person field is ~250 writes, arriving in
+// a burst when the briefing ends and everyone scans at once.
+//
+// So the limits are sized for a whole venue, and the real backstops against
+// junk are elsewhere and cheaper: teams are capped per event, team names are
+// unique, and team size is enforced. Override with PUBLIC_WRITE_LIMIT /
+// TEAM_CREATE_LIMIT if a bigger event needs more headroom.
+const WINDOW_MS = 60_000;
+const LIMITS = {
+  // joining and connecting a phone: the high-volume, entirely legitimate path
+  register: Number(process.env.PUBLIC_WRITE_LIMIT) || 300,
+  // creating teams: rarer, and the only one that leaves visible junk behind
+  team: Number(process.env.TEAM_CREATE_LIMIT) || 60,
+};
+
+const buckets = new Map(); // `${kind}:${ip}` -> { start, count }
+
+// Buckets are per IP and never revisited once an event moves on, so sweep
+// expired ones rather than growing the map for the life of the process.
+function sweep(now) {
+  if (buckets.size < 5000) return;
+  for (const [k, b] of buckets) if (now - b.start > WINDOW_MS) buckets.delete(k);
 }
+
+function rateLimit(kind) {
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = `${kind}:${req.ip || 'unknown'}`;
+    let b = buckets.get(key);
+    if (!b || now - b.start > WINDOW_MS) {
+      b = { start: now, count: 0 };
+      buckets.set(key, b);
+      sweep(now);
+    }
+    if (++b.count > LIMITS[kind]) {
+      res.set('Retry-After', String(Math.ceil((b.start + WINDOW_MS - now) / 1000)));
+      return res.status(429).json({ error: 'too many requests just now — wait a few seconds and try again' });
+    }
+    next();
+  };
+}
+
+const publicWriteLimit = rateLimit('register');
+const teamCreateLimit = rateLimit('team');
 
 // Public list of events for the landing page: PUBLISHED events only.
 // Drafts stay reachable at their direct URLs (for private testing) but are
@@ -80,7 +116,7 @@ router.get('/:slug/info', async (req, res) => {
 // Anyone can start a team until the race is over — onboarding is self-serve
 // (admin keeps full control in /admin). Name is the only input; the creator
 // then registers as its first runner like everyone else.
-router.post('/:slug/teams', publicWriteLimit, async (req, res) => {
+router.post('/:slug/teams', teamCreateLimit, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM events WHERE slug = $1', [req.params.slug]);
   const event = rows[0];
   if (!event) return res.status(404).json({ error: 'no such event' });
