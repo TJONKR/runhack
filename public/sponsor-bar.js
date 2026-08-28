@@ -16,7 +16,7 @@
     healf: 1.17, cognition: 1.0, poke: 0.94, elevenlabs: 0.78,
     'wispr-flow': 0.89, tavily: 1.06, ame: 1.44, perfectted: 1.44,
     pitchless: 1.0, 'unicorn-mafia': 1.56, deepline: 1.0, delfa: 1.0,
-    algosoup: 0.94, thrad: 1.89,
+    algosoup: 0.94, thrad: 1.89, o2: 1.56,
   };
   const scaleFor = (f) => {
     for (const k in SCALES) if (f.includes(k)) return SCALES[k];
