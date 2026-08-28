@@ -88,9 +88,16 @@ router.post('/:slug/teams', publicWriteLimit, async (req, res) => {
   // spam backstop, far above any real field size — admins can always add more
   const count = await pool.query('SELECT count(*)::int AS n FROM teams WHERE event_id = $1', [event.id]);
   if (count.rows[0].n >= 100) return res.status(403).json({ error: 'team limit reached — talk to the crew' });
+  // Optional: the Devin account the team works in. Bragging stats only —
+  // never scored, and ignored entirely unless the server has Devin creds.
+  const devinEmail = String(req.body.devinEmail || '').trim().toLowerCase();
+  if (devinEmail && (devinEmail.length > 120 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(devinEmail))) {
+    return res.status(400).json({ error: 'devinEmail must be an email address' });
+  }
   const team = await pool.query(
-    'INSERT INTO teams (event_id, name) VALUES ($1, $2) ON CONFLICT (event_id, name) DO NOTHING RETURNING id, name',
-    [event.id, name]
+    `INSERT INTO teams (event_id, name, devin_email) VALUES ($1, $2, $3)
+     ON CONFLICT (event_id, name) DO NOTHING RETURNING id, name`,
+    [event.id, name, devinEmail || null]
   );
   if (!team.rows[0]) return res.status(409).json({ error: 'that team name is taken' });
   res.json({ teamId: team.rows[0].id, name: team.rows[0].name });
@@ -197,7 +204,8 @@ router.get('/:slug/team/:teamId', async (req, res) => {
   if (!event) return res.status(404).json({ error: 'no such event' });
   const t = await pool.query(
     `SELECT id, name, repo_url, repo_status, commit_count, commit_override, score_adjust, active_device_id,
-            last_commit_msg, last_commit_author, last_commit_at, committers
+            last_commit_msg, last_commit_author, last_commit_at, committers,
+            devin_sessions, devin_messages
        FROM teams WHERE id = $1 AND event_id = $2`,
     [req.params.teamId, event.id]
   );
@@ -245,6 +253,7 @@ router.get('/:slug/team/:teamId', async (req, res) => {
     repo: team.repo_url || null,
     commits,
     committers: team.committers ?? null,
+    devin: team.devin_sessions ? { sessions: team.devin_sessions, messages: team.devin_messages } : null,
     lastCommit: team.last_commit_msg
       ? {
           message: team.last_commit_msg,
@@ -312,6 +321,7 @@ router.get('/:slug/board', async (req, res) => {
   const teams = await pool.query(
     `SELECT t.id, t.name, t.repo_url, t.commit_count, t.commit_override, t.score_adjust,
             t.last_commit_msg, t.last_commit_author, t.last_commit_at, t.committers,
+            t.devin_sessions, t.devin_messages,
             COALESCE(dm.name, ad.name, CASE WHEN ad.id IS NULL THEN NULL ELSE 'Team device' END) AS runner_name,
             ad.last_fix AS runner_last_fix,
             ll.seconds AS last_lap_s, ll.counted AS last_lap_valid, ll.reject_reason AS last_lap_reason,
@@ -361,6 +371,8 @@ router.get('/:slug/board', async (req, res) => {
         commits,
         repo: t.repo_url || null,
         committers: t.committers ?? null,
+        // side-stat, never scored; null when the team didn't opt in
+        devin: t.devin_sessions ? { sessions: t.devin_sessions, messages: t.devin_messages } : null,
         lastCommit: t.last_commit_msg
           ? {
               message: t.last_commit_msg,

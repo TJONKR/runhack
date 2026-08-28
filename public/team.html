@@ -57,6 +57,7 @@
   .stat b { display: block; font-family: 'Geist Mono', monospace; font-size: 24px; font-weight: 600; }
   .stat.score b { color: var(--gold); }
   .stat.best b { color: #4ade80; }
+  .stat.devin b { color: var(--sky); }
   .stat span { font-family: 'Geist Mono', monospace; font-size: 9px; letter-spacing: 0.2em;
                text-transform: uppercase; color: rgba(244,243,239,0.5); }
   .stat .sub { display: block; font-family: 'Geist Mono', monospace; font-size: 10px;
@@ -107,6 +108,7 @@
       <div class="stat"><b id="laps">0</b><span>laps</span><span class="sub" id="invalids"></span></div>
       <div class="stat"><b id="km">0.0</b><span>km</span></div>
       <div class="stat"><b id="commits">0</b><span>commits</span><span class="sub" id="committers"></span></div>
+      <div class="stat devin" id="devinStat" style="display:none"><b id="devinMsgs">0</b><span>devin prompts</span><span class="sub" id="devinSessions"></span></div>
       <div class="stat best"><b id="bestlap">—</b><span>best lap</span><span class="sub" id="bestpace"></span></div>
       <div class="stat"><b id="avglap">—</b><span>avg lap</span><span class="sub" id="avgpace"></span></div>
       <div class="stat"><b id="lastlap">—</b><span>last lap</span><span class="sub" id="lastpace"></span></div>
@@ -163,6 +165,14 @@ async function tick() {
     commits.textContent = t.commits; score.textContent = t.score;
     invalids.textContent = t.invalidLaps ? `+${t.invalidLaps} invalid` : '';
     committers.textContent = t.committers ? `${t.committers} committing` : '';
+    // Opt-in bragging stat; hidden entirely for teams that didn't register a Devin email.
+    const dv = document.getElementById('devinStat');
+    if (t.devin) {
+      dv.style.display = '';
+      document.getElementById('devinMsgs').textContent = t.devin.messages;
+      document.getElementById('devinSessions').textContent =
+        `${t.devin.sessions} ${t.devin.sessions === 1 ? 'session' : 'sessions'}`;
+    } else dv.style.display = 'none';
     bestlap.textContent = t.bestLapS != null ? t.bestLapS + 's' : '—';
     bestpace.textContent = pace(t.bestPaceSPerKm);
     avglap.textContent = t.avgLapS != null ? t.avgLapS + 's' : '—';

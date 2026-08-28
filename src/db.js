@@ -103,6 +103,12 @@ export async function initDb() {
     ALTER TABLE members ALTER COLUMN user_id DROP NOT NULL;
     ALTER TABLE points ALTER COLUMN member_id DROP NOT NULL;
     ALTER TABLE points ADD COLUMN IF NOT EXISTS device_id integer;
+    -- Devin: optional per-team bragging stats, never part of the score
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS devin_email text;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS devin_sessions integer NOT NULL DEFAULT 0;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS devin_messages integer NOT NULL DEFAULT 0;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS devin_acus real NOT NULL DEFAULT 0;
+    ALTER TABLE teams ADD COLUMN IF NOT EXISTS devin_checked_at timestamptz;
     -- after the ALTERs: on a fresh db device_id only exists from this point
     CREATE INDEX IF NOT EXISTS points_device_time ON points (device_id, fixed_at);
   `);

@@ -79,6 +79,7 @@
   .muted code { font-family: 'Geist Mono', monospace; font-size: 11px; word-break: break-all;
                 color: rgba(244,243,239,0.75); }
   a { color: var(--sky); }
+  .opt { color: rgba(244,243,239,0.35); letter-spacing: 0.12em; }
 </style>
 </head>
 <body>
@@ -101,6 +102,12 @@
     <div id="createFields" style="display:none">
       <label>Team name</label>
       <input id="teamName" placeholder="e.g. Prompt Pacers" autocomplete="off" maxlength="40">
+      <label>Devin email <span class="opt">optional</span></label>
+      <input id="devinEmail" placeholder="you@yourteam.com" autocomplete="off"
+             inputmode="email" type="email" maxlength="120">
+      <p class="muted" style="margin-top:8px">Working in Devin? Drop the email you use there and
+        the board shows how hard your team drove its agent. Just for the bragging rights —
+        it doesn't affect your score.</p>
     </div>
     <label>Your name</label>
     <input id="name" placeholder="runner name" autocomplete="off">
@@ -238,11 +245,12 @@ async function register() {
   if (mode === 'create') {
     const teamName = document.getElementById('teamName').value.trim();
     if (!teamName) return alert('Enter a team name');
+    const devinEmail = document.getElementById('devinEmail').value.trim() || undefined;
     let c;
     try { c = await fetch(`/api/${slug}/teams`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: teamName }),
+      body: JSON.stringify({ name: teamName, devinEmail }),
     }); } catch { return alert('No connection — check signal and try again.'); }
     if (!c.ok) return alert('Could not create the team: ' + (await c.text()));
     team = (await c.json()).teamId;

@@ -175,6 +175,7 @@
   }
   .lap-reason { font-family: 'Geist Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
                 color: rgba(244,243,239,0.4); display: block; }
+  .devinline { color: rgba(58,144,230,0.75) !important; }
   .commitline { display: block; font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 400;
                 color: rgba(244,243,239,0.45); margin-top: 3px; max-width: 340px; overflow: hidden;
                 text-overflow: ellipsis; white-space: nowrap; }
@@ -279,7 +280,11 @@ async function tick() {
         : '—';
       const commit = t.lastCommit
         ? `<span class="commitline" title="${esc(t.lastCommit.author || '')}">↑ ${esc(t.lastCommit.message)} · ${fmtAgo(t.lastCommit.agoS)}</span>`
-        : '';
+        : t.devin
+          // Opt-in side-stat, never scored: how hard the team drove its agent.
+          ? `<span class="commitline devinline">◆ ${t.devin.messages} prompts to Devin · ${
+              t.devin.sessions} ${t.devin.sessions === 1 ? 'session' : 'sessions'}</span>`
+          : '';
       const live = t.status === 'running';
       return `<tr class="${i === 0 ? 'first' : ''} ${live ? 'live' : ''} rowlink" onclick="location.href='/${slug}/team/${t.teamId}'">
         <td class="rank">${String(i + 1).padStart(2, '0')}${move}</td>
