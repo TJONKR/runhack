@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { pool, eventConfig, eventStatus, teamScore } from './db.js';
 import { parseRepo } from './github.js';
 import { verifyKey } from './devin.js';
+import { ingestOrigin } from './origin.js';
 
 const router = Router();
 
@@ -212,7 +213,9 @@ router.post('/:slug/devices', publicWriteLimit, async (req, res) => {
     'INSERT INTO devices (event_id, team_id, member_id, token, name) VALUES ($1, $2, $3, $4, $5)',
     [event.id, teamId, memberId, token, name?.trim() || null]
   );
-  res.json({ token });
+  // ingestUrl is what gets baked into the phone's Traccar config — pinned to
+  // the canonical origin so a vanity-domain change can't orphan the device.
+  res.json({ token, ingestUrl: `${ingestOrigin(req)}/ingest/${token}` });
 });
 
 // Join-page poll: has the first Traccar fix landed yet?
