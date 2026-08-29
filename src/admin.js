@@ -3,6 +3,7 @@ import { pool, eventConfig, devinWindow } from './db.js';
 import { countCommits, pollOnce } from './github.js';
 import { verifyKey, fetchTeamMetrics } from './devin.js';
 import { readIngestLog, clearIngestLog } from './ingestLog.js';
+import { ingestOrigin } from './origin.js';
 
 const router = Router();
 
@@ -278,6 +279,8 @@ router.get('/events/:slug/devices', async (req, res) => {
   );
   res.json(rows.map((d) => ({
     ...d,
+    // canonical ingest URL for (re)connect config links — see src/origin.js
+    ingest_url: `${ingestOrigin(req)}/ingest/${d.token}`,
     lastPingAgoS: d.last_fix?.at ? Math.round((Date.now() - d.last_fix.at) / 1000) : null,
     lat: d.last_fix?.lat ?? null,
     lng: d.last_fix?.lng ?? null,

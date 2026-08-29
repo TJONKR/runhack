@@ -183,6 +183,7 @@
 <script>
 const slug = location.pathname.split('/')[1];
 let token = null;          // this phone's device token
+let serverIngestUrl = null; // canonical ingest URL minted by the server
 let newMemberId = null;    // person just registered on this phone
 let joinedTeamId = null;   // team joined/created on this phone
 let info = null;
@@ -301,14 +302,18 @@ async function connectDevice() {
     body: JSON.stringify({ teamId: teamId(), memberId, name: label }),
   }); } catch { return alert('No connection — check signal and try again.'); }
   if (!r.ok) return alert('Device setup failed: ' + (await r.text()));
-  token = (await r.json()).token;
+  const d = await r.json();
+  token = d.token;
+  serverIngestUrl = d.ingestUrl || null;
   show('step-traccar');
   document.getElementById('manualUrl').textContent = ingestUrl();
   document.getElementById('manualId').textContent = token;
   poll();
 }
 
-function ingestUrl() { return `${location.origin}/ingest/${token}`; }
+// Prefer the server's canonical URL: the phone keeps this address for the
+// whole race, and the page's own domain may not be the stable one.
+function ingestUrl() { return serverIngestUrl || `${location.origin}/ingest/${token}`; }
 
 function openTraccar() {
   // wakelock: survive Android deep sleep over an 8h race; heartbeat: standby
