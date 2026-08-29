@@ -282,7 +282,7 @@ async function tick() {
         ? `<span class="commitline" title="${esc(t.lastCommit.author || '')}">↑ ${esc(t.lastCommit.message)} · ${fmtAgo(t.lastCommit.agoS)}</span>`
         : t.devin
           // Opt-in side-stat, never scored: how hard the team drove its agent.
-          ? `<span class="commitline devinline">◆ ${t.devin.msgs} prompts · ${t.devin.sessions} ${
+          ? `<span class="commitline devinline">◆ ${t.devin.msgs} prompt${t.devin.msgs === 1 ? '' : 's'} · ${t.devin.sessions} ${
               t.devin.sessions === 1 ? 'session' : 'sessions'
             }${t.devin.active ? `<b class="devinlive">${t.devin.active} running</b>` : ''}${
               t.devin.prsOpen
