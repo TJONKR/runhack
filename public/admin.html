@@ -731,8 +731,19 @@ function teamReadiness(t) {
   const missing = [];
   if (Number(t.member_count) < min) missing.push(`${min - t.member_count} more runner${min - t.member_count > 1 ? 's' : ''}`);
   if (Number(t.connected_count) < 1) missing.push('a device ping');
-  if (t.repo_status !== 'connected') missing.push('github');
+  // GitHub is optional now — only flag it when a repo was actually set and
+  // then failed to verify. Otherwise every team reads "needs github" forever.
+  if (t.repo_url && t.repo_status !== 'connected') missing.push('github repo failing');
   return missing;
+}
+function devinPill(t) {
+  if (!t.has_devin) return `<span class="muted">no devin key</span>`;
+  const map = {
+    connected: ['connected ✓', 'var(--ok)'],
+    error: ['error ✕', 'var(--orange)'],
+  };
+  const [label, col] = map[t.devin_status] || ['key set', 'var(--sky)'];
+  return `<span class="statuschip" style="color:${col};border-color:${col}">${label}</span>`;
 }
 function repoPill(t) {
   if (!t.repo_url) return `<span class="muted">no repo</span>`;
@@ -742,6 +753,44 @@ function repoPill(t) {
   };
   const [label, col] = map[t.repo_status] || ['untested', 'rgba(244,243,239,0.5)'];
   return `<span class="statuschip" style="color:${col};border-color:${col}">${label}</span>`;
+}
+async function saveDevin(id, btn) {
+  const input = document.getElementById('devinKey' + id);
+  const apiKey = input.value.trim();
+  if (!apiKey) return alert('Paste a key first.');
+  btn.textContent = 'checking…';
+  const r = await fetch(`/api/admin/events/${cur.slug}/teams/${id}/devin`, {
+    method: 'POST', headers: H(), body: JSON.stringify({ apiKey }),
+  });
+  const body = await r.json().catch(() => ({}));
+  btn.textContent = 'save';
+  if (!r.ok) return alert(body.error || 'Devin rejected that key.');
+  input.value = '';
+  await checkDevin(id, btn);   // store it, then immediately show real numbers
+}
+async function clearDevin(id, btn) {
+  if (!confirm('Remove this team\u2019s Devin key?')) return;
+  await fetch(`/api/admin/events/${cur.slug}/teams/${id}/devin`, {
+    method: 'POST', headers: H(), body: JSON.stringify({ apiKey: null }),
+  });
+  openEvent(cur.slug, curTab);
+}
+async function checkDevin(id, btn) {
+  const t0 = btn.textContent;
+  btn.textContent = 'testing…';
+  const r = await fetch(`/api/admin/events/${cur.slug}/teams/${id}/check-devin`, {
+    method: 'POST', headers: H(),
+  });
+  const d = await r.json().catch(() => ({}));
+  btn.textContent = t0;
+  if (d.status === 'connected') {
+    alert(`Devin connected.\n\n${d.msgs} prompts · ${d.sessions} sessions` +
+          `${d.active ? ` (${d.active} running)` : ''}` +
+          `${d.prsOpen ? `\n${d.prsMerged}/${d.prsOpen} PRs merged` : ''}` +
+          `${d.acus ? `\n${d.acus} ACUs` : ''}`);
+  } else if (d.status === 'not_set') alert('No Devin key stored for this team.');
+  else alert('Devin rejected the stored key — check it and paste again.');
+  openEvent(cur.slug, curTab);
 }
 function renderTeams() {
   const teams = cur.teams || [];
@@ -768,6 +817,13 @@ function renderTeams() {
         onchange="patchTeam(${t.id}, { repoUrl: this.value })" style="flex:1;font-size:12px">
         ${repoPill(t)}
         <button onclick="checkRepo(${t.id}, this)" title="verify the repo is public and reachable, refresh commit count">test</button></div>
+      <div class="row"><input type="password" id="devinKey${t.id}" autocomplete="off"
+        placeholder="${t.has_devin ? 'devin key set — paste a new one to replace' : 'devin api key (cog_… or apk_user_…)'}"
+        style="flex:1;font-size:12px">
+        ${devinPill(t)}
+        <button onclick="saveDevin(${t.id}, this)" title="store this team's Devin key (never shown again)">save</button>
+        <button onclick="checkDevin(${t.id}, this)" title="pull this team's Devin stats now">test</button>
+        ${t.has_devin ? `<button onclick="clearDevin(${t.id}, this)" title="remove the key">✕</button>` : ''}</div>
       <div class="row" style="font-size:12px">
         <span class="muted">links:</span>
         <button onclick="copyText('${location.origin}/${cur.slug}/join?team=${t.id}', this)">copy join link</button>
